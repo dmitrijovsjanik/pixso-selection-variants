@@ -2230,17 +2230,6 @@
           selectEl.value = swapPickerState.selectedSource;
         }
 
-        // If we're waiting to find a component — load all sources now
-        if (swapPickerState.findComponentKey) {
-          if (!swapPickerState.libraryCache['__local__']) {
-            postMsg({ type: 'get-local-components' });
-          }
-          for (const src of msg.sources) {
-            if (src.type === 'library' && !swapPickerState.libraryCache[src.key]) {
-              postMsg({ type: 'get-library-contents', libraryKey: src.key });
-            }
-          }
-        }
       }
     }
 
@@ -2248,13 +2237,12 @@
       if (swapPickerState && swapPickerState.propertyName === msg.propertyName) {
         swapPickerState.preferredValues = msg.values;
 
-        // If navigateTo is provided and values are empty — find component across all sources
+        // If navigateTo is provided and values are empty — navigate to component's location
         if (msg.navigateTo && msg.values.length === 0 && swapPickerState.level === 'quickswap') {
           const nav = msg.navigateTo;
-          const compKey = nav.componentKey;
           const compName = nav.componentName || '';
 
-          // Compute sub-path from component name
+          // Compute sub-path from component name (slashes = folder hierarchy)
           let subPath = null;
           if (compName.includes(' / ')) {
             const parts = compName.split(' / ');
@@ -2262,30 +2250,49 @@
             subPath = parts.join(' / ');
           }
 
-          // Store for later matching when source data loads
-          swapPickerState.findComponentKey = compKey;
+          // Determine which source to use
+          let sourceKey = '__local__';
+          if (nav.libraryKey) {
+            sourceKey = nav.libraryKey;
+          }
+
+          // Use containerName from component metadata as folder
+          const folderName = nav.containerName || nav.pageName || '';
+
+          // Store for matching
+          swapPickerState.currentValue = nav.componentKey;
+          swapPickerState.findComponentKey = nav.componentKey;
           swapPickerState.findComponentSubPath = subPath;
 
-          // Load ALL sources and search for the component
-          // Start by loading local + all libraries
-          if (!swapPickerState.libraryCache['__local__']) {
-            postMsg({ type: 'get-local-components' });
-          }
-          if (swapPickerState.sources) {
-            for (const src of swapPickerState.sources) {
-              if (src.type === 'library' && !swapPickerState.libraryCache[src.key]) {
-                postMsg({ type: 'get-library-contents', libraryKey: src.key });
+          // Set source and load if needed
+          swapPickerState.selectedSource = sourceKey;
+          swapPickerState.navigateToFolder = folderName;
+          swapPickerState.navigateToSubPath = subPath;
+          swapPickerState.level = 'folders';
+
+          // Update dropdown
+          const selectEl = document.getElementById('swap-source-select');
+          if (selectEl) selectEl.value = sourceKey;
+
+          if (!swapPickerState.libraryCache[sourceKey]) {
+            if (sourceKey === '__local__') {
+              postMsg({ type: 'get-local-components' });
+            } else {
+              postMsg({ type: 'get-library-contents', libraryKey: sourceKey });
+            }
+          } else {
+            // Already cached — navigate directly
+            if (folderName) {
+              swapPickerState.history.push({ level: 'folders', currentFolder: null, currentSubPath: null, currentSet: null });
+              swapPickerState.level = 'components';
+              swapPickerState.currentFolder = folderName;
+              if (subPath) {
+                swapPickerState.history.push({ level: 'components', currentFolder: folderName, currentSubPath: null, currentSet: null });
+                swapPickerState.currentSubPath = subPath;
               }
             }
           }
-
-          // Try to find in already cached data
-          const found = findComponentInCache(compKey, subPath);
-          if (found) {
-            applyFoundComponent(found, subPath);
-          }
-          // If not found yet — show loading, will navigate when data arrives
-          renderSwapPickerBody();
+          renderSwapPicker();
         } else if (msg.values.length === 0 && !msg.navigateTo && swapPickerState.level === 'quickswap') {
           // No quick swap, no navigateTo — go to first source
           if (swapPickerState.sources && swapPickerState.sources.length > 0) {
@@ -2312,36 +2319,54 @@
     if (msg.type === 'library-contents') {
       if (swapPickerState) {
         swapPickerState.libraryCache[msg.libraryKey] = { folders: msg.folders };
-        // Check if we're searching for a component
-        if (swapPickerState.findComponentKey) {
-          const found = findComponentInCache(swapPickerState.findComponentKey, swapPickerState.findComponentSubPath);
-          if (found) {
-            swapPickerState.findComponentKey = null;
-            applyFoundComponent(found, swapPickerState.findComponentSubPath);
-            swapPickerState.findComponentSubPath = null;
-            return;
+        // Auto-navigate to folder if pending
+        if (swapPickerState.navigateToFolder && swapPickerState.level === 'folders') {
+          const target = swapPickerState.navigateToFolder;
+          const hasFolder = msg.folders.some(f => f.name === target);
+          if (hasFolder) {
+            swapPickerState.history.push({ level: 'folders', currentFolder: null, currentSubPath: null, currentSet: null });
+            swapPickerState.level = 'components';
+            swapPickerState.currentFolder = target;
+            const subPath = swapPickerState.navigateToSubPath;
+            swapPickerState.navigateToFolder = null;
+            swapPickerState.navigateToSubPath = null;
+            if (subPath) {
+              swapPickerState.history.push({ level: 'components', currentFolder: target, currentSubPath: null, currentSet: null });
+              swapPickerState.currentSubPath = subPath;
+            }
+          } else {
+            swapPickerState.navigateToFolder = null;
+            swapPickerState.navigateToSubPath = null;
           }
         }
-        renderSwapPickerBody();
+        renderSwapPicker();
       }
     }
 
     if (msg.type === 'local-contents') {
       if (swapPickerState) {
         swapPickerState.libraryCache['__local__'] = { folders: msg.folders };
-        // Check if we're searching for a component
-        if (swapPickerState.findComponentKey) {
-          const found = findComponentInCache(swapPickerState.findComponentKey, swapPickerState.findComponentSubPath);
-          if (found) {
-            swapPickerState.findComponentKey = null;
-            applyFoundComponent(found, swapPickerState.findComponentSubPath);
-            swapPickerState.findComponentSubPath = null;
-            // Still request thumbnails
+        // Auto-navigate to folder if pending and this is the right source
+        if (swapPickerState.navigateToFolder && swapPickerState.level === 'folders' && swapPickerState.selectedSource === '__local__') {
+          const target = swapPickerState.navigateToFolder;
+          const hasFolder = msg.folders.some(f => f.name === target);
+          if (hasFolder) {
+            swapPickerState.history.push({ level: 'folders', currentFolder: null, currentSubPath: null, currentSet: null });
+            swapPickerState.level = 'components';
+            swapPickerState.currentFolder = target;
+            const subPath = swapPickerState.navigateToSubPath;
+            swapPickerState.navigateToFolder = null;
+            swapPickerState.navigateToSubPath = null;
+            if (subPath) {
+              swapPickerState.history.push({ level: 'components', currentFolder: target, currentSubPath: null, currentSet: null });
+              swapPickerState.currentSubPath = subPath;
+            }
+          } else {
+            swapPickerState.navigateToFolder = null;
+            swapPickerState.navigateToSubPath = null;
           }
         }
-        if (!swapPickerState.findComponentKey) {
-          renderSwapPickerBody();
-        }
+        renderSwapPicker();
 
         // Request thumbnails for local components (first 30)
         const ids = [];

@@ -229,23 +229,38 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
       const swapChild = findSwapChild(instance);
 
       if (swapChild) {
+        // Layer name — what designer sees
         info.currentValueName = swapChild.name;
+
         if (isInstanceNode(swapChild)) {
           const mc = swapChild.mainComponent;
           if (mc) {
+            // All metadata available directly on ComponentNode
             const mcP = mc.parent;
             const compName = (mcP && mcP.type === "COMPONENT_SET") ? mcP.name : mc.name;
             info.currentValueSource = compName;
+            // Store full metadata for picker navigation
+            (info as any).swapComponentKey = mc.key;
+            (info as any).swapComponentName = compName;
+            (info as any).swapPageName = (mc as any).pageName || "";
+            (info as any).swapContainerName = (mc as any).containerName || "";
+            (info as any).swapRemote = mc.remote;
           }
         }
       } else {
         const swapNode = pixso.getNodeById(propValue.value);
         if (swapNode) {
           info.currentValueName = swapNode.name;
+          if ("key" in swapNode) {
+            (info as any).swapComponentKey = (swapNode as any).key;
+            (info as any).swapComponentName = swapNode.name;
+            (info as any).swapPageName = (swapNode as any).pageName || "";
+            (info as any).swapContainerName = (swapNode as any).containerName || "";
+            (info as any).swapRemote = (swapNode as any).remote || false;
+          }
         }
       }
 
-      // Last fallback: use the clean property name
       if (!info.currentValueName) {
         info.currentValueName = propName.replace(/#\d+:\d+$/, '').replace(/^[└─\s]+/, '').trim();
       }
@@ -1274,18 +1289,30 @@ pixso.ui.on("message", (msg: any) => {
     } else {
       // Navigate to current component's location
       if (currentComp) {
-        const compName = currentComp.parent?.type === "COMPONENT_SET"
-          ? currentComp.parent.name
-          : currentComp.name;
-        const compKey = currentComp.key;
-
-        // Send component info — UI will find it in sources
-        pixso.ui.postMessage({
-          type: "preferred-swap-values",
-          propertyName,
-          values: [],
-          navigateTo: { componentName: compName, componentKey: compKey },
+        const mcP = currentComp.parent;
+        const compName = (mcP && mcP.type === "COMPONENT_SET") ? mcP.name : currentComp.name;
+        // All info directly from ComponentNode — no async needed
+        const nav: any = {
+          componentName: compName,
+          componentKey: currentComp.key,
+          containerName: (currentComp as any).containerName || "",
+          pageName: (currentComp as any).pageName || "",
+          remote: currentComp.remote,
+        };
+        // Also try to get library key (async but fast)
+        currentComp.getLibraryInfoAsync().then((libInfo) => {
+          if (libInfo && libInfo.key) nav.libraryKey = libInfo.key;
+          if (libInfo && libInfo.name) nav.libraryName = libInfo.name;
+        }).catch(() => {}).finally(() => {
+          console.log("[Swap] navigateTo:", JSON.stringify(nav));
+          pixso.ui.postMessage({
+            type: "preferred-swap-values",
+            propertyName,
+            values: [],
+            navigateTo: nav,
+          });
         });
+        return;
       } else {
         pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [] });
       }
