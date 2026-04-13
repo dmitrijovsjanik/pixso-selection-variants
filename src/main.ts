@@ -1151,22 +1151,48 @@ pixso.ui.on("message", (msg: any) => {
       return null;
     }
 
-    // Helper: get component location for navigation
-    function getCompLocation(comp: ComponentNode): { sourceKey: string; containerName: string } {
+    // Helper: get component location for navigation (async — resolves library info)
+    async function getCompLocation(comp: ComponentNode): Promise<{ sourceKey: string; containerName: string }> {
+      // Try to get library info — works for both local-published and remote components
+      try {
+        const libInfo = await comp.getLibraryInfoAsync();
+        if (libInfo && libInfo.key) {
+          // It's a published component — find containerName from library
+          const assets = await pixso.getLibraryByKeyAsync(libInfo.key);
+          for (const c of assets.componentList) {
+            if (c.key === comp.key) {
+              return { sourceKey: libInfo.key, containerName: c.containerName || c.pageName || "" };
+            }
+            if (c.type === "COMPONENT_SET") {
+              for (const v of c.variants) {
+                if (v.key === comp.key) {
+                  return { sourceKey: libInfo.key, containerName: c.containerName || c.pageName || "" };
+                }
+              }
+            }
+          }
+          // Component found in library but not in componentList — use library key with empty container
+          return { sourceKey: libInfo.key, containerName: "" };
+        }
+      } catch {}
+
+      // Fallback: local component — find container frame
       let sourceKey = "__local__";
       let containerName = "";
-      if (comp.remote) {
-        containerName = (comp as any).containerName || (comp as any).pageName || "";
-      } else {
-        let p: BaseNode | null = comp.parent;
-        if (p && p.type === "COMPONENT_SET") p = p.parent;
-        while (p && p.type !== "PAGE") {
-          if (p.type === "FRAME" || p.type === "SECTION") {
-            containerName = p.name;
-            break;
-          }
-          p = p.parent;
+      let p: BaseNode | null = comp.parent;
+      if (p && p.type === "COMPONENT_SET") p = p.parent;
+      while (p && p.type !== "PAGE") {
+        if (p.type === "FRAME" || p.type === "SECTION") {
+          containerName = p.name;
+          break;
         }
+        p = p.parent;
+      }
+      // If no frame found, use page name
+      if (!containerName) {
+        let page: BaseNode | null = comp;
+        while (page && page.type !== "PAGE") page = page.parent;
+        if (page) containerName = page.name;
       }
       return { sourceKey, containerName };
     }
@@ -1301,14 +1327,16 @@ pixso.ui.on("message", (msg: any) => {
     } else {
       // Navigate to current component's location
       if (currentComp) {
-        const loc = getCompLocation(currentComp);
-        console.log("[Swap] Navigate to:", loc.sourceKey, loc.containerName);
-        pixso.ui.postMessage({
-          type: "preferred-swap-values",
-          propertyName,
-          values: [],
-          navigateTo: loc,
+        getCompLocation(currentComp).then((loc) => {
+          console.log("[Swap] Navigate to:", loc.sourceKey, loc.containerName);
+          pixso.ui.postMessage({
+            type: "preferred-swap-values",
+            propertyName,
+            values: [],
+            navigateTo: loc,
+          });
         });
+        return; // async — will send message from .then()
       } else {
         // Nothing found
         pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [] });
