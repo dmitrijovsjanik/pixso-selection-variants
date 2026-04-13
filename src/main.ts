@@ -281,22 +281,45 @@ console.log("[Selection Variants] Plugin starting...");
 pixso.showUI(__html__, { width: 360, height: 520 });
 console.log("[Selection Variants] UI shown");
 
-// Selection history for back navigation
-let previousSelection: string[] = [];
+// Selection history stack for hierarchical back navigation
+interface SelectionHistoryEntry {
+  ids: string[];
+  label: string; // display name for breadcrumb
+}
+let selectionStack: SelectionHistoryEntry[] = [];
 let ignoreNextSelectionChange = false;
 
-function savePreviousSelection() {
+function getSelectionLabel(): string {
+  const sel = pixso.currentPage.selection;
+  if (!sel || sel.length === 0) return "";
+  if (sel.length === 1) return sel[0].name;
+  return `${sel.length} objects`;
+}
+
+function pushSelection() {
   const sel = pixso.currentPage.selection;
   if (sel && sel.length > 0) {
-    previousSelection = sel.map((n) => n.id);
+    selectionStack.push({
+      ids: sel.map((n) => n.id),
+      label: getSelectionLabel(),
+    });
   }
 }
 
 // Send initial data
 function sendSelectionData() {
   const data = analyzeSelection();
-  const hasPrevious = previousSelection.length > 0;
-  pixso.ui.postMessage({ type: "selection-data", data, hasPreviousSelection: hasPrevious });
+  // Build breadcrumb trail from stack
+  const breadcrumbs = selectionStack.map((entry, index) => ({
+    label: entry.label,
+    index,
+  }));
+  pixso.ui.postMessage({
+    type: "selection-data",
+    data,
+    breadcrumbs,
+    currentLabel: getSelectionLabel(),
+  });
 }
 
 sendSelectionData();
@@ -308,8 +331,8 @@ pixso.on("selectionchange", () => {
     sendSelectionData();
     return;
   }
-  // User changed selection manually — clear history
-  previousSelection = [];
+  // User changed selection manually — clear history stack
+  selectionStack = [];
   sendSelectionData();
 });
 
@@ -387,7 +410,7 @@ pixso.ui.on("message", (msg: any) => {
     const { instanceId } = msg;
     const node = pixso.getNodeById(instanceId);
     if (node && "type" in node) {
-      savePreviousSelection();
+      pushSelection();
       ignoreNextSelectionChange = true;
       pixso.currentPage.selection = [node as SceneNode];
     }
@@ -406,23 +429,44 @@ pixso.ui.on("message", (msg: any) => {
       }
     }
     if (nodes.length > 0) {
-      savePreviousSelection();
+      pushSelection();
       ignoreNextSelectionChange = true;
       pixso.currentPage.selection = nodes;
     }
   }
 
-  if (msg.type === "restore-selection") {
-    // Go back to previous selection
-    if (previousSelection.length > 0) {
+  if (msg.type === "navigate-back") {
+    // Go back one level
+    if (selectionStack.length > 0) {
+      const entry = selectionStack.pop()!;
       const nodes: SceneNode[] = [];
-      for (const id of previousSelection) {
+      for (const id of entry.ids) {
         const node = pixso.getNodeById(id);
         if (node && "type" in node) {
           nodes.push(node as SceneNode);
         }
       }
-      previousSelection = [];
+      if (nodes.length > 0) {
+        ignoreNextSelectionChange = true;
+        pixso.currentPage.selection = nodes;
+      }
+    }
+  }
+
+  if (msg.type === "navigate-to-level") {
+    // Jump to a specific level in the breadcrumb
+    const { index } = msg;
+    if (index >= 0 && index < selectionStack.length) {
+      const entry = selectionStack[index];
+      // Truncate stack to that level
+      selectionStack = selectionStack.slice(0, index);
+      const nodes: SceneNode[] = [];
+      for (const id of entry.ids) {
+        const node = pixso.getNodeById(id);
+        if (node && "type" in node) {
+          nodes.push(node as SceneNode);
+        }
+      }
       if (nodes.length > 0) {
         ignoreNextSelectionChange = true;
         pixso.currentPage.selection = nodes;

@@ -508,26 +508,22 @@
     font-weight: 600;
   }
 
-  /* ─── Back to parent navigation bar ─── */
-  .nav-back-bar {
+  /* ─── Breadcrumb navigation ─── */
+  .breadcrumb-bar {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
+    gap: 2px;
+    padding: 6px 12px;
     background: var(--neutral-0);
     border-bottom: 1px solid var(--neutral-3);
     position: sticky;
     top: 34px;
     z-index: 6;
-    cursor: pointer;
-    transition: background var(--transition-fast);
+    flex-wrap: wrap;
+    min-height: 36px;
   }
 
-  .nav-back-bar:hover {
-    background: var(--neutral-2);
-  }
-
-  .nav-back-bar .btn-back {
+  .breadcrumb-back {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -536,15 +532,57 @@
     border: none;
     background: var(--neutral-a-3);
     border-radius: var(--radius-md);
+    cursor: pointer;
     color: var(--neutral-11);
     flex-shrink: 0;
-    pointer-events: none;
+    transition: all var(--transition-fast);
+    margin-right: 4px;
   }
 
-  .nav-back-bar .nav-back-label {
+  .breadcrumb-back:hover {
+    background: var(--neutral-a-4);
+    color: var(--neutral-12);
+  }
+
+  .breadcrumb-item {
+    display: inline-flex;
+    align-items: center;
     font-size: 12px;
     font-weight: 500;
-    color: var(--neutral-11);
+    color: var(--brand-11);
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+    border: none;
+    background: none;
+    font-family: inherit;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .breadcrumb-item:hover {
+    background: var(--brand-a-3);
+    color: var(--brand-9);
+  }
+
+  .breadcrumb-separator {
+    color: var(--neutral-5);
+    font-size: 11px;
+    user-select: none;
+    flex-shrink: 0;
+  }
+
+  .breadcrumb-current {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--neutral-12);
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>
 </head>
@@ -562,7 +600,8 @@
   // ─── State ───
   let currentData = null;
   let detailViewComponent = null; // null = bulk list, string = component name for detail view
-  let hasPreviousSelection = false;
+  let breadcrumbs = [];  // [{label, index}]
+  let currentLabel = '';
 
   // ─── Tab switching ───
   document.querySelectorAll('.tab').forEach(tab => {
@@ -615,6 +654,25 @@
       return { on: prop.options.find(o => o.toLowerCase() === 'true'), off: prop.options.find(o => o.toLowerCase() === 'false') };
     }
     return { on: prop.options.find(o => o.toLowerCase() === 'yes'), off: prop.options.find(o => o.toLowerCase() === 'no') };
+  }
+
+  // ─── Render breadcrumb navigation ───
+  function renderBreadcrumbs() {
+    if (breadcrumbs.length === 0) return '';
+
+    let html = `<div class="breadcrumb-bar">`;
+    html += `<button class="breadcrumb-back" data-navigate-back title="Back">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>`;
+
+    for (const crumb of breadcrumbs) {
+      html += `<button class="breadcrumb-item" data-navigate-to="${crumb.index}" title="${escAttr(crumb.label)}">${escHtml(crumb.label)}</button>`;
+      html += `<span class="breadcrumb-separator">/</span>`;
+    }
+
+    html += `<span class="breadcrumb-current" title="${escAttr(currentLabel)}">${escHtml(currentLabel)}</span>`;
+    html += `</div>`;
+    return html;
   }
 
   // ─── Render a property control ───
@@ -773,17 +831,7 @@
     }
 
     // ─── Bulk list view (main) ───
-    let html = '';
-
-    if (hasPreviousSelection) {
-      html += `<div class="nav-back-bar" data-restore-selection>
-        <span class="btn-back">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
-        </span>
-        <span class="nav-back-label">Back to parent selection</span>
-      </div>`;
-    }
-
+    let html = renderBreadcrumbs();
     html += `<div class="summary-bar"><strong>${data.instances.length}</strong> instance${data.instances.length > 1 ? 's' : ''} from <strong>${names.length}</strong> component${names.length > 1 ? 's' : ''}</div>`;
 
     for (const compName of names) {
@@ -911,17 +959,7 @@
       return;
     }
 
-    let html = '';
-
-    if (hasPreviousSelection) {
-      html += `<div class="nav-back-bar" data-restore-selection>
-        <span class="btn-back">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
-        </span>
-        <span class="nav-back-label">Back to parent selection</span>
-      </div>`;
-    }
-
+    let html = renderBreadcrumbs();
     html += `<div class="summary-bar"><strong>${data.instances.length}</strong> instance${data.instances.length > 1 ? 's' : ''} from <strong>${names.length}</strong> component${names.length > 1 ? 's' : ''}</div>`;
 
     for (const compName of names) {
@@ -973,11 +1011,19 @@
       });
     });
 
-    // Restore previous selection
-    document.querySelectorAll('[data-restore-selection]').forEach(el => {
+    // Breadcrumb: back one level
+    document.querySelectorAll('[data-navigate-back]').forEach(el => {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
-        postMsg({ type: 'restore-selection' });
+        postMsg({ type: 'navigate-back' });
+      });
+    });
+
+    // Breadcrumb: jump to specific level
+    document.querySelectorAll('[data-navigate-to]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        postMsg({ type: 'navigate-to-level', index: parseInt(el.dataset.navigateTo) });
       });
     });
 
@@ -1084,7 +1130,8 @@
 
     if (msg.type === 'selection-data') {
       currentData = msg.data;
-      hasPreviousSelection = !!msg.hasPreviousSelection;
+      breadcrumbs = msg.breadcrumbs || [];
+      currentLabel = msg.currentLabel || '';
       renderVariantsTab(currentData);
       renderInstancesTab(currentData);
     }
