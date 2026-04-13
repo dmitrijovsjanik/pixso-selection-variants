@@ -1168,7 +1168,35 @@ pixso.ui.on("message", (msg: any) => {
         }
       } catch {}
 
-      // Fallback: local component — find container frame
+      // Try containerName/pageName from PublishableNodeMixin
+      const pubContainerName = (comp as any).containerName;
+      const pubPageName = (comp as any).pageName;
+
+      if (pubContainerName || pubPageName) {
+        // Component has publishing info — it may be from a library
+        // Try to find which subscribed library contains this component
+        try {
+          const libraries = await pixso.getLibraryListAsync();
+          for (const lib of libraries) {
+            if (!lib.subscribed) continue;
+            const assets = await pixso.getLibraryByKeyAsync(lib.key);
+            for (const c of assets.componentList) {
+              if (c.key === comp.key) {
+                return { sourceKey: lib.key, containerName: c.containerName || c.pageName || "" };
+              }
+              if (c.type === "COMPONENT_SET") {
+                for (const v of c.variants) {
+                  if (v.key === comp.key) {
+                    return { sourceKey: lib.key, containerName: c.containerName || c.pageName || "" };
+                  }
+                }
+              }
+            }
+          }
+        } catch {}
+      }
+
+      // Fallback: truly local component — find container frame
       let sourceKey = "__local__";
       let containerName = "";
       let p: BaseNode | null = comp.parent;
@@ -1180,7 +1208,6 @@ pixso.ui.on("message", (msg: any) => {
         }
         p = p.parent;
       }
-      // If no frame found, use page name
       if (!containerName) {
         let page: BaseNode | null = comp;
         while (page && page.type !== "PAGE") page = page.parent;

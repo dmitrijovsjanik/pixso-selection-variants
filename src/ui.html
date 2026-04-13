@@ -2246,11 +2246,28 @@
           const targetFolder = swapPickerState.navigateToFolder;
           const hasFolder = msg.folders.some(f => f.name === targetFolder);
           if (hasFolder) {
+            // Push folders level to history so back works
+            swapPickerState.history.push({
+              level: 'folders',
+              currentFolder: null,
+              currentSubPath: null,
+              currentSet: null,
+            });
             swapPickerState.level = 'components';
             swapPickerState.currentFolder = targetFolder;
-            swapPickerState.currentSubPath = swapPickerState.navigateToSubPath || null;
+            const subPath = swapPickerState.navigateToSubPath || null;
             swapPickerState.navigateToFolder = null;
             swapPickerState.navigateToSubPath = null;
+            // If sub-path, push components-without-subpath to history too
+            if (subPath) {
+              swapPickerState.history.push({
+                level: 'components',
+                currentFolder: targetFolder,
+                currentSubPath: null,
+                currentSet: null,
+              });
+              swapPickerState.currentSubPath = subPath;
+            }
           }
         }
         renderSwapPickerBody();
@@ -2266,11 +2283,26 @@
           const folderNames = msg.folders.map(f => f.name);
           const hasFolder = msg.folders.some(f => f.name === targetFolder);
           if (hasFolder) {
+            swapPickerState.history.push({
+              level: 'folders',
+              currentFolder: null,
+              currentSubPath: null,
+              currentSet: null,
+            });
             swapPickerState.level = 'components';
             swapPickerState.currentFolder = targetFolder;
-            swapPickerState.currentSubPath = swapPickerState.navigateToSubPath || null;
+            const subPath = swapPickerState.navigateToSubPath || null;
             swapPickerState.navigateToFolder = null;
             swapPickerState.navigateToSubPath = null;
+            if (subPath) {
+              swapPickerState.history.push({
+                level: 'components',
+                currentFolder: targetFolder,
+                currentSubPath: null,
+                currentSet: null,
+              });
+              swapPickerState.currentSubPath = subPath;
+            }
           }
         }
         renderSwapPickerBody();
