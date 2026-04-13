@@ -287,7 +287,7 @@ interface SelectionHistoryEntry {
   label: string; // display name for breadcrumb
 }
 let selectionStack: SelectionHistoryEntry[] = [];
-let ignoreNextSelectionChange = false;
+let programmaticChangeUntil = 0; // timestamp — ignore selectionchange until this time
 
 function getSelectionLabel(): string {
   const sel = pixso.currentPage.selection;
@@ -324,10 +324,14 @@ function sendSelectionData() {
 
 sendSelectionData();
 
+function markProgrammaticChange() {
+  programmaticChangeUntil = Date.now() + 500; // ignore for 500ms
+}
+
 // Listen for selection changes
 pixso.on("selectionchange", () => {
-  if (ignoreNextSelectionChange) {
-    ignoreNextSelectionChange = false;
+  if (Date.now() < programmaticChangeUntil) {
+    // This was triggered by our own code — keep the stack
     sendSelectionData();
     return;
   }
@@ -411,7 +415,7 @@ pixso.ui.on("message", (msg: any) => {
     const node = pixso.getNodeById(instanceId);
     if (node && "type" in node) {
       pushSelection();
-      ignoreNextSelectionChange = true;
+      markProgrammaticChange();
       pixso.currentPage.selection = [node as SceneNode];
     }
   }
@@ -430,7 +434,7 @@ pixso.ui.on("message", (msg: any) => {
     }
     if (nodes.length > 0) {
       pushSelection();
-      ignoreNextSelectionChange = true;
+      markProgrammaticChange();
       pixso.currentPage.selection = nodes;
     }
   }
@@ -447,7 +451,7 @@ pixso.ui.on("message", (msg: any) => {
         }
       }
       if (nodes.length > 0) {
-        ignoreNextSelectionChange = true;
+        markProgrammaticChange();
         pixso.currentPage.selection = nodes;
       }
     }
@@ -468,7 +472,7 @@ pixso.ui.on("message", (msg: any) => {
         }
       }
       if (nodes.length > 0) {
-        ignoreNextSelectionChange = true;
+        markProgrammaticChange();
         pixso.currentPage.selection = nodes;
       }
     }
