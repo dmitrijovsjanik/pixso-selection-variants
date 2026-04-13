@@ -267,16 +267,35 @@ console.log("[Selection Variants] Plugin starting...");
 pixso.showUI(__html__, { width: 360, height: 520 });
 console.log("[Selection Variants] UI shown");
 
+// Selection history for back navigation
+let previousSelection: string[] = [];
+let ignoreNextSelectionChange = false;
+
+function savePreviousSelection() {
+  const sel = pixso.currentPage.selection;
+  if (sel && sel.length > 0) {
+    previousSelection = sel.map((n) => n.id);
+  }
+}
+
 // Send initial data
 function sendSelectionData() {
   const data = analyzeSelection();
-  pixso.ui.postMessage({ type: "selection-data", data });
+  const hasPrevious = previousSelection.length > 0;
+  pixso.ui.postMessage({ type: "selection-data", data, hasPreviousSelection: hasPrevious });
 }
 
 sendSelectionData();
 
 // Listen for selection changes
 pixso.on("selectionchange", () => {
+  if (ignoreNextSelectionChange) {
+    ignoreNextSelectionChange = false;
+    sendSelectionData();
+    return;
+  }
+  // User changed selection manually — clear history
+  previousSelection = [];
   sendSelectionData();
 });
 
@@ -354,6 +373,8 @@ pixso.ui.on("message", (msg: any) => {
     const { instanceId } = msg;
     const node = pixso.getNodeById(instanceId);
     if (node && "type" in node) {
+      savePreviousSelection();
+      ignoreNextSelectionChange = true;
       pixso.currentPage.selection = [node as SceneNode];
     }
   }
@@ -371,7 +392,27 @@ pixso.ui.on("message", (msg: any) => {
       }
     }
     if (nodes.length > 0) {
+      savePreviousSelection();
+      ignoreNextSelectionChange = true;
       pixso.currentPage.selection = nodes;
+    }
+  }
+
+  if (msg.type === "restore-selection") {
+    // Go back to previous selection
+    if (previousSelection.length > 0) {
+      const nodes: SceneNode[] = [];
+      for (const id of previousSelection) {
+        const node = pixso.getNodeById(id);
+        if (node && "type" in node) {
+          nodes.push(node as SceneNode);
+        }
+      }
+      previousSelection = [];
+      if (nodes.length > 0) {
+        ignoreNextSelectionChange = true;
+        pixso.currentPage.selection = nodes;
+      }
     }
   }
 

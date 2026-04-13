@@ -493,6 +493,9 @@
 
   /* ─── Summary bar ─── */
   .summary-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     padding: 8px 12px;
     font-size: 12px;
     color: var(--neutral-9);
@@ -503,6 +506,32 @@
   .summary-bar strong {
     color: var(--neutral-12);
     font-weight: 600;
+  }
+
+  .summary-text {
+    flex: 1;
+  }
+
+  .btn-back-selection {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--neutral-11);
+    background: var(--neutral-a-3);
+    border: none;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    font-family: inherit;
+    flex-shrink: 0;
+  }
+
+  .btn-back-selection:hover {
+    background: var(--neutral-a-4);
+    color: var(--neutral-12);
   }
 </style>
 </head>
@@ -520,6 +549,7 @@
   // ─── State ───
   let currentData = null;
   let detailViewComponent = null; // null = bulk list, string = component name for detail view
+  let hasPreviousSelection = false;
 
   // ─── Tab switching ───
   document.querySelectorAll('.tab').forEach(tab => {
@@ -730,7 +760,13 @@
     }
 
     // ─── Bulk list view (main) ───
-    let html = `<div class="summary-bar"><strong>${data.instances.length}</strong> instance${data.instances.length > 1 ? 's' : ''} from <strong>${names.length}</strong> component${names.length > 1 ? 's' : ''}</div>`;
+    const backBtn = hasPreviousSelection
+      ? `<button class="btn-back-selection" data-restore-selection>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+          Back
+        </button>`
+      : '';
+    let html = `<div class="summary-bar"><span class="summary-text"><strong>${data.instances.length}</strong> instance${data.instances.length > 1 ? 's' : ''} from <strong>${names.length}</strong> component${names.length > 1 ? 's' : ''}</span>${backBtn}</div>`;
 
     for (const compName of names) {
       const instances = groups[compName];
@@ -857,7 +893,13 @@
       return;
     }
 
-    let html = `<div class="summary-bar"><strong>${data.instances.length}</strong> instance${data.instances.length > 1 ? 's' : ''} from <strong>${names.length}</strong> component${names.length > 1 ? 's' : ''}</div>`;
+    const backBtn2 = hasPreviousSelection
+      ? `<button class="btn-back-selection" data-restore-selection>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+          Back
+        </button>`
+      : '';
+    let html = `<div class="summary-bar"><span class="summary-text"><strong>${data.instances.length}</strong> instance${data.instances.length > 1 ? 's' : ''} from <strong>${names.length}</strong> component${names.length > 1 ? 's' : ''}</span>${backBtn2}</div>`;
 
     for (const compName of names) {
       const instances = groups[compName];
@@ -905,6 +947,14 @@
       el.addEventListener('click', (e) => {
         if (e.target.closest('.btn-icon') || e.target.closest('.component-actions')) return;
         el.closest('.component-group').classList.toggle('collapsed');
+      });
+    });
+
+    // Restore previous selection
+    document.querySelectorAll('[data-restore-selection]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        postMsg({ type: 'restore-selection' });
       });
     });
 
@@ -1011,6 +1061,7 @@
 
     if (msg.type === 'selection-data') {
       currentData = msg.data;
+      hasPreviousSelection = !!msg.hasPreviousSelection;
       renderVariantsTab(currentData);
       renderInstancesTab(currentData);
     }
