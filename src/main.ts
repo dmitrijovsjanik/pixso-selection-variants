@@ -209,90 +209,48 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
     }
 
     if (propValue.type === "INSTANCE_SWAP" && typeof propValue.value === "string") {
-      // Helper: get source info from a ComponentNode
-      const getSource = (mc: ComponentNode): string => {
-        if (mc.remote) {
-          return (mc as any).pageName || "Library";
-        }
-        let p: BaseNode | null = mc;
-        while (p && p.type !== "PAGE") p = p.parent;
-        return p ? "Local · " + p.name : "Local";
-      };
-
-      // Strategy 1: find child via componentPropertyReferences — recursive search
-      function findSwapRef(parent: SceneNode): boolean {
-        if (!hasChildren(parent)) return false;
+      // Find the child node controlled by this swap property
+      // Walk all descendants looking for componentPropertyReferences.mainComponent match
+      function findSwapChild(parent: SceneNode): SceneNode | null {
+        if (!hasChildren(parent)) return null;
         for (const child of parent.children) {
           if ("componentPropertyReferences" in child) {
             const refs = (child as any).componentPropertyReferences;
             if (refs && refs.mainComponent === propName) {
-              info.currentValueName = child.name;
-              if (isInstanceNode(child)) {
-                const mc = child.mainComponent;
-                if (mc) {
-                  const mcP = mc.parent;
-                  const compName = (mcP && mcP.type === "COMPONENT_SET") ? mcP.name + " / " + mc.name : mc.name;
-                  info.currentValueSource = compName + " · " + getSource(mc);
-                }
-              }
-              return true;
+              return child;
             }
           }
-          if (findSwapRef(child)) return true;
+          const deeper = findSwapChild(child);
+          if (deeper) return deeper;
         }
-        return false;
+        return null;
       }
-      findSwapRef(instance);
 
-      // Strategy 2 fallback: getNodeById on the value
-      if (!info.currentValueName) {
+      const swapChild = findSwapChild(instance);
+
+      if (swapChild) {
+        // Use the layer name — this is what designer sees
+        info.currentValueName = swapChild.name;
+        // Add component info as source
+        if (isInstanceNode(swapChild)) {
+          const mc = swapChild.mainComponent;
+          if (mc) {
+            const mcP = mc.parent;
+            const compName = (mcP && mcP.type === "COMPONENT_SET") ? mcP.name : mc.name;
+            info.currentValueSource = compName;
+          }
+        }
+      } else {
+        // Fallback: try getNodeById on the value
         const swapNode = pixso.getNodeById(propValue.value);
         if (swapNode) {
           info.currentValueName = swapNode.name;
-          if (swapNode.type === "INSTANCE") {
-            const mc = (swapNode as InstanceNode).mainComponent;
-            if (mc) info.currentValueSource = mc.name + " · " + getSource(mc);
-          } else if (swapNode.type === "COMPONENT") {
-            info.currentValueSource = getSource(swapNode as ComponentNode);
-          }
         }
       }
 
-      // Strategy 3: search all pages for a component with this key
+      // Last fallback: use the clean property name
       if (!info.currentValueName) {
-        const valueStr = propValue.value as string;
-        console.log("[Swap Name] value=", valueStr, "getNodeById=null, searching by key...");
-        function findCompByKey(node: BaseNode): ComponentNode | null {
-          if ("type" in node) {
-            if (node.type === "COMPONENT" && (node as ComponentNode).key === valueStr) {
-              return node as ComponentNode;
-            }
-            if ("children" in node) {
-              for (const c of (node as any).children) {
-                const found = findCompByKey(c);
-                if (found) return found;
-              }
-            }
-          }
-          return null;
-        }
-        for (const page of pixso.root.children) {
-          const found = findCompByKey(page);
-          if (found) {
-            const mcP = found.parent;
-            info.currentValueName = (mcP && mcP.type === "COMPONENT_SET") ? mcP.name + " / " + found.name : found.name;
-            info.currentValueSource = getSource(found);
-            break;
-          }
-        }
-      }
-
-      // Strategy 4: use defaultValue name from definitions
-      if (!info.currentValueName && def.defaultValue) {
-        const defNode = pixso.getNodeById(String(def.defaultValue));
-        if (defNode) {
-          info.currentValueName = defNode.name;
-        }
+        info.currentValueName = propName.replace(/#\d+:\d+$/, '').replace(/^[└─\s]+/, '').trim();
       }
 
       // Collect preferred values keys for lazy resolution
@@ -903,12 +861,17 @@ pixso.ui.on("message", (msg: any) => {
     if (localNode) {
       applySwap(localNode.id);
     } else {
-      // It's a library key — import first
-      pixso.importComponentByKeyAsync(componentIdOrKey).then((comp) => {
-        applySwap(comp.id);
-      }).catch(() => {
-        console.error("Failed to import component:", componentIdOrKey);
-      });
+      // It's a library key — try import (may fail for some libraries)
+      try {
+        pixso.importComponentByKeyAsync(componentIdOrKey).then((comp) => {
+          applySwap(comp.id);
+        }).catch(() => {
+          console.warn("[Swap] Failed to import component:", componentIdOrKey);
+          pixso.notify("Could not import component from library", { error: true });
+        });
+      } catch {
+        console.warn("[Swap] importComponentByKeyAsync threw:", componentIdOrKey);
+      }
     }
   }
 
@@ -1215,23 +1178,6 @@ pixso.ui.on("message", (msg: any) => {
       }
 
       console.log("[Swap] Found locally:", foundKeys.size, "of", keySet.size);
-
-      // Step 3: Keys not found locally — send what we have, try import for the rest
-      if (foundKeys.size < keySet.size) {
-        pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [...values] });
-        const missing = prefKeys.filter(k => !foundKeys.has(k));
-        for (const key of missing) {
-          Promise.race([
-            pixso.importComponentByKeyAsync(key),
-            new Promise<null>((_, rej) => setTimeout(() => rej("timeout"), 3000)),
-          ]).then((comp: any) => {
-            if (comp) {
-              values.push({ id: comp.id, name: comp.name, thumbnailDataUrl: "" });
-              pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [...values] });
-            }
-          }).catch(() => {});
-        }
-      }
     } else {
       // No preferred values — try siblings via componentPropertyReferences
       if (sel && sel.length > 0) {
