@@ -192,13 +192,6 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
     }
   }
 
-  // Log swap properties for debugging
-  for (const [k, v] of Object.entries(compProps)) {
-    if (v.type === "INSTANCE_SWAP") {
-      console.log("[SwapDebug] prop:", k, "value:", v.value, "inDefs:", !!(definitions && definitions[k]), "inOrder:", orderedKeys.includes(k));
-    }
-  }
-
   for (const propName of orderedKeys) {
     const propValue = compProps[propName];
     if (!propValue) continue;
@@ -234,7 +227,6 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
       }
 
       const swapChild = findSwapChild(instance);
-      console.log("[SwapName]", propName, "value=", propValue.value, "findSwapChild=", swapChild?.type, swapChild?.name, "getNodeById=", pixso.getNodeById(propValue.value)?.type, pixso.getNodeById(propValue.value)?.name);
 
       if (swapChild) {
         info.currentValueName = swapChild.name;
@@ -1232,7 +1224,6 @@ pixso.ui.on("message", (msg: any) => {
       currentKeyInPreferred = prefKeys.includes(currentComp.key);
     }
 
-    console.log("[Swap] prefKeys:", prefKeys.length, "currentComp:", currentComp?.name, "key:", currentComp?.key, "inPref:", currentKeyInPreferred);
 
     // Decision: show quick swap OR navigate to current component's location
     const shouldShowQuickSwap = prefKeys.length > 0 && currentKeyInPreferred;
@@ -1328,12 +1319,15 @@ pixso.ui.on("message", (msg: any) => {
       // Navigate to current component's location
       if (currentComp) {
         getCompLocation(currentComp).then((loc) => {
-          console.log("[Swap] Navigate to:", loc.sourceKey, loc.containerName);
+          // Add component name so UI can compute sub-path from slashes
+          const compName = currentComp!.parent?.type === "COMPONENT_SET"
+            ? currentComp!.parent.name
+            : currentComp!.name;
           pixso.ui.postMessage({
             type: "preferred-swap-values",
             propertyName,
             values: [],
-            navigateTo: loc,
+            navigateTo: { ...loc, componentName: compName },
           });
         });
         return; // async — will send message from .then()

@@ -1628,6 +1628,7 @@
       searchResults: null,
       selectedSource: '__quickswap__',
       currentFolder: null,
+      currentSubPath: null,
       currentSet: null,
     };
     renderSwapPicker();
@@ -1646,6 +1647,7 @@
     swapPickerState.history.push({
       level: swapPickerState.level,
       currentFolder: swapPickerState.currentFolder,
+      currentSubPath: swapPickerState.currentSubPath,
       currentSet: swapPickerState.currentSet,
     });
     swapPickerState.level = level;
@@ -1655,9 +1657,18 @@
     // Update title
     const titleEl = document.querySelector('.swap-picker-title');
     if (titleEl) {
-      if (level === 'components' && data.currentFolder) titleEl.textContent = data.currentFolder;
-      else if (level === 'variants' && data.currentSet) titleEl.textContent = data.currentSet.name;
-      else titleEl.textContent = 'Choose component';
+      const subPath = swapPickerState.currentSubPath;
+      if (subPath) {
+        // Show last segment of sub-path
+        const parts = subPath.split(' / ');
+        titleEl.textContent = parts[parts.length - 1];
+      } else if (level === 'components' && data.currentFolder) {
+        titleEl.textContent = data.currentFolder;
+      } else if (level === 'variants' && data.currentSet) {
+        titleEl.textContent = data.currentSet.name;
+      } else {
+        titleEl.textContent = 'Choose component';
+      }
     }
   }
 
@@ -1670,12 +1681,22 @@
     const prev = swapPickerState.history.pop();
     swapPickerState.level = prev.level;
     swapPickerState.currentFolder = prev.currentFolder;
+    swapPickerState.currentSubPath = prev.currentSubPath;
     swapPickerState.currentSet = prev.currentSet;
     swapPickerState.searchResults = null;
     renderSwapPickerBody();
     // Update title
     const titleEl = document.querySelector('.swap-picker-title');
-    if (titleEl) titleEl.textContent = 'Choose component';
+    if (titleEl) {
+      if (prev.currentSubPath) {
+        const parts = prev.currentSubPath.split(' / ');
+        titleEl.textContent = parts[parts.length - 1];
+      } else if (prev.currentFolder) {
+        titleEl.textContent = prev.currentFolder;
+      } else {
+        titleEl.textContent = 'Choose component';
+      }
+    }
   }
 
   function applySwapFromPicker(componentIdOrKey) {
@@ -1866,8 +1887,47 @@
     const folder = data.folders.find(f => f.name === s.currentFolder);
     if (!folder) return `<div class="swap-picker-empty">Folder not found</div>`;
 
-    let html = '';
+    // Parse component names by "/" to create sub-groups
+    // If we have a subPath filter, show only components matching that prefix
+    const subPath = s.currentSubPath || '';
+
+    // Group components: those with deeper "/" paths become sub-folders
+    const subFolders = {};
+    const directComponents = [];
+
     for (const comp of folder.components) {
+      const name = comp.name;
+      // Strip the subPath prefix if we're inside a sub-folder
+      const relativeName = subPath ? (name.startsWith(subPath + ' / ') ? name.slice(subPath.length + 3) : null) : name;
+      if (relativeName === null) continue;
+
+      const slashIdx = relativeName.indexOf(' / ');
+      if (slashIdx > 0) {
+        // Has sub-path — group into folder
+        const folderName = relativeName.substring(0, slashIdx);
+        if (!subFolders[folderName]) subFolders[folderName] = 0;
+        subFolders[folderName]++;
+      } else {
+        // Direct component at this level
+        directComponents.push({ ...comp, displayName: relativeName });
+      }
+    }
+
+    let html = '';
+
+    // Render sub-folders first
+    const subFolderNames = Object.keys(subFolders).sort();
+    for (const sfName of subFolderNames) {
+      html += `<div class="swap-folder-item" data-picker-subfolder="${escAttr(subPath ? subPath + ' / ' + sfName : sfName)}">
+        <span class="swap-folder-icon">${folderSvg}</span>
+        <span class="swap-item-name">${escHtml(sfName)}</span>
+        <span class="swap-item-count">${subFolders[sfName]}</span>
+        <span class="swap-item-chevron">${chevronSvg}</span>
+      </div>`;
+    }
+
+    // Render direct components
+    for (const comp of directComponents) {
       const isSet = comp.type === 'COMPONENT_SET';
       let thumb;
       if (comp.thumbnailUrl) {
@@ -1890,7 +1950,7 @@
         html += `<div class="swap-component-item ${isCurrentSet ? 'current' : ''}" data-picker-apply="${escAttr(applyId)}">
           ${thumb}
           <div class="swap-comp-info">
-            <div class="swap-comp-name">${escHtml(comp.name)}</div>
+            <div class="swap-comp-name">${escHtml(comp.displayName || comp.name)}</div>
             <div class="swap-comp-source">${(comp.variants || []).length} variants</div>
           </div>
         </div>`;
@@ -1898,10 +1958,16 @@
         const isCurrentComp = s.currentValue && (comp.key === s.currentValue || comp.id === s.currentValue);
         html += `<div class="swap-component-item ${isCurrentComp ? 'current' : ''}" data-picker-apply="${escAttr(comp.key || comp.id)}">
           ${thumb}
-          <div class="swap-comp-info"><div class="swap-comp-name">${escHtml(comp.name)}</div></div>
+          <div class="swap-comp-info"><div class="swap-comp-name">${escHtml(comp.displayName || comp.name)}</div></div>
         </div>`;
       }
     }
+
+    // Scroll to current component if visible
+    setTimeout(() => {
+      const current = document.querySelector('.swap-component-item.current');
+      if (current) current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 50);
 
     return html || `<div class="swap-picker-empty">No components</div>`;
   }
@@ -1961,7 +2027,14 @@
     // Navigate to folder
     document.querySelectorAll('[data-picker-folder]').forEach(el => {
       el.addEventListener('click', () => {
-        navigateSwapPicker('components', { currentFolder: el.dataset.pickerFolder });
+        navigateSwapPicker('components', { currentFolder: el.dataset.pickerFolder, currentSubPath: null });
+      });
+    });
+
+    // Navigate into sub-folder (name prefix based)
+    document.querySelectorAll('[data-picker-subfolder]').forEach(el => {
+      el.addEventListener('click', () => {
+        navigateSwapPicker('components', { currentSubPath: el.dataset.pickerSubfolder });
       });
     });
 
@@ -2102,6 +2175,14 @@
           swapPickerState.selectedSource = sourceKey;
           swapPickerState.level = 'folders';
           swapPickerState.navigateToFolder = nav.containerName || null;
+          // Compute sub-path from component name (strip last segment = component name itself)
+          if (nav.componentName && nav.componentName.includes(' / ')) {
+            const parts = nav.componentName.split(' / ');
+            parts.pop(); // remove component name, keep folder path
+            swapPickerState.navigateToSubPath = parts.join(' / ');
+          } else {
+            swapPickerState.navigateToSubPath = null;
+          }
 
           // Update dropdown
           const selectEl = document.getElementById('swap-source-select');
@@ -2155,7 +2236,9 @@
           if (hasFolder) {
             swapPickerState.level = 'components';
             swapPickerState.currentFolder = targetFolder;
+            swapPickerState.currentSubPath = swapPickerState.navigateToSubPath || null;
             swapPickerState.navigateToFolder = null;
+            swapPickerState.navigateToSubPath = null;
           }
         }
         renderSwapPickerBody();
@@ -2169,12 +2252,13 @@
         if (swapPickerState.navigateToFolder && swapPickerState.level === 'folders') {
           const targetFolder = swapPickerState.navigateToFolder;
           const folderNames = msg.folders.map(f => f.name);
-          console.log("[SwapUI] Looking for folder:", targetFolder, "in:", folderNames);
           const hasFolder = msg.folders.some(f => f.name === targetFolder);
           if (hasFolder) {
             swapPickerState.level = 'components';
             swapPickerState.currentFolder = targetFolder;
+            swapPickerState.currentSubPath = swapPickerState.navigateToSubPath || null;
             swapPickerState.navigateToFolder = null;
+            swapPickerState.navigateToSubPath = null;
           }
         }
         renderSwapPickerBody();
