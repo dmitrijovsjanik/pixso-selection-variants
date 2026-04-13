@@ -209,44 +209,49 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
     }
 
     if (propValue.type === "INSTANCE_SWAP" && typeof propValue.value === "string") {
-      // Helper: resolve name + source from a ComponentNode
-      const resolveComp = (mc: ComponentNode) => {
-        const mcP = mc.parent;
-        info.currentValueName = (mcP && mcP.type === "COMPONENT_SET") ? mcP.name + " / " + mc.name : mc.name;
-        // Get source: pageName + remote status
+      // Helper: get source info from a ComponentNode
+      const getSource = (mc: ComponentNode): string => {
         if (mc.remote) {
-          info.currentValueSource = (mc as any).pageName || "Library";
-        } else {
-          // Find page name by walking up
-          let p: BaseNode | null = mc;
-          while (p && p.type !== "PAGE") p = p.parent;
-          info.currentValueSource = p ? "Local · " + p.name : "Local";
+          return (mc as any).pageName || "Library";
         }
+        let p: BaseNode | null = mc;
+        while (p && p.type !== "PAGE") p = p.parent;
+        return p ? "Local · " + p.name : "Local";
       };
 
-      // Strategy 1: getNodeById on the value
-      const swapNode = pixso.getNodeById(propValue.value);
-      if (swapNode) {
-        if (swapNode.type === "INSTANCE") {
-          const mc = (swapNode as InstanceNode).mainComponent;
-          if (mc) resolveComp(mc);
-        } else if (swapNode.type === "COMPONENT") {
-          resolveComp(swapNode as ComponentNode);
-        } else {
-          info.currentValueName = swapNode.name;
-        }
-      }
-
-      // Strategy 2: find child via componentPropertyReferences
-      if (!info.currentValueName && hasChildren(instance)) {
+      // Strategy 1: find child via componentPropertyReferences — get layer name
+      if (hasChildren(instance)) {
         for (const child of instance.children) {
           if ("componentPropertyReferences" in child) {
             const refs = (child as any).componentPropertyReferences;
-            if (refs && refs.mainComponent === propName && isInstanceNode(child)) {
-              const mc = child.mainComponent;
-              if (mc) resolveComp(mc);
+            if (refs && refs.mainComponent === propName) {
+              // Use the layer name as display name
+              info.currentValueName = child.name;
+              // Get component source info
+              if (isInstanceNode(child)) {
+                const mc = child.mainComponent;
+                if (mc) {
+                  const mcP = mc.parent;
+                  const compName = (mcP && mcP.type === "COMPONENT_SET") ? mcP.name + " / " + mc.name : mc.name;
+                  info.currentValueSource = compName + " · " + getSource(mc);
+                }
+              }
               break;
             }
+          }
+        }
+      }
+
+      // Strategy 2 fallback: getNodeById on the value
+      if (!info.currentValueName) {
+        const swapNode = pixso.getNodeById(propValue.value);
+        if (swapNode) {
+          info.currentValueName = swapNode.name;
+          if (swapNode.type === "INSTANCE") {
+            const mc = (swapNode as InstanceNode).mainComponent;
+            if (mc) info.currentValueSource = mc.name + " · " + getSource(mc);
+          } else if (swapNode.type === "COMPONENT") {
+            info.currentValueSource = getSource(swapNode as ComponentNode);
           }
         }
       }
