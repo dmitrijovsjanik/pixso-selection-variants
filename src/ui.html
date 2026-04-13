@@ -1812,25 +1812,9 @@
     }
 
     if (s.preferredValues.length === 0) {
-      // No quick swap — auto-switch to first available source
-      if (s.sources && s.sources.length > 0) {
-        const first = s.sources[0];
-        s.selectedSource = first.key;
-        s.level = 'folders';
-        // Update dropdown
-        const selectEl = document.getElementById('swap-source-select');
-        if (selectEl) selectEl.value = first.key;
-        // Load data
-        if (!s.libraryCache[first.key]) {
-          if (first.type === 'local') {
-            postMsg({ type: 'get-local-components' });
-          } else {
-            postMsg({ type: 'get-library-contents', libraryKey: first.key });
-          }
-        }
-        return renderPickerFolders();
-      }
-      return `<div class="swap-picker-empty">No swap options available. Use search above.</div>`;
+      // Empty quick swap — navigateTo should handle this via message handler
+      // Show loading while navigation happens
+      return `<div class="swap-picker-loading"><div class="spinner"></div>Loading...</div>`;
     }
 
     let html = '';
@@ -2138,6 +2122,23 @@
             }
             renderSwapPickerBody();
           }
+        } else if (msg.values.length === 0 && !msg.navigateTo && swapPickerState.level === 'quickswap') {
+          // No quick swap, no navigateTo — go to first source
+          if (swapPickerState.sources && swapPickerState.sources.length > 0) {
+            const first = swapPickerState.sources[0];
+            swapPickerState.selectedSource = first.key;
+            swapPickerState.level = 'folders';
+            const selectEl = document.getElementById('swap-source-select');
+            if (selectEl) selectEl.value = first.key;
+            if (!swapPickerState.libraryCache[first.key]) {
+              if (first.type === 'local') {
+                postMsg({ type: 'get-local-components' });
+              } else {
+                postMsg({ type: 'get-library-contents', libraryKey: first.key });
+              }
+            }
+          }
+          renderSwapPickerBody();
         } else if (swapPickerState.level === 'quickswap') {
           renderSwapPickerBody();
         }
