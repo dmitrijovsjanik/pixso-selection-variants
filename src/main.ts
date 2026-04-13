@@ -258,6 +258,43 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
         }
       }
 
+      // Strategy 3: search all pages for a component with this key
+      if (!info.currentValueName) {
+        const valueStr = propValue.value as string;
+        console.log("[Swap Name] value=", valueStr, "getNodeById=null, searching by key...");
+        function findCompByKey(node: BaseNode): ComponentNode | null {
+          if ("type" in node) {
+            if (node.type === "COMPONENT" && (node as ComponentNode).key === valueStr) {
+              return node as ComponentNode;
+            }
+            if ("children" in node) {
+              for (const c of (node as any).children) {
+                const found = findCompByKey(c);
+                if (found) return found;
+              }
+            }
+          }
+          return null;
+        }
+        for (const page of pixso.root.children) {
+          const found = findCompByKey(page);
+          if (found) {
+            const mcP = found.parent;
+            info.currentValueName = (mcP && mcP.type === "COMPONENT_SET") ? mcP.name + " / " + found.name : found.name;
+            info.currentValueSource = getSource(found);
+            break;
+          }
+        }
+      }
+
+      // Strategy 4: use defaultValue name from definitions
+      if (!info.currentValueName && def.defaultValue) {
+        const defNode = pixso.getNodeById(String(def.defaultValue));
+        if (defNode) {
+          info.currentValueName = defNode.name;
+        }
+      }
+
       // Collect preferred values keys for lazy resolution
       if (def && "preferredValues" in def && (def as any).preferredValues) {
         info.preferredValues = (def as any).preferredValues.map(

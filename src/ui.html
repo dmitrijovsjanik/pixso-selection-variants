@@ -1911,14 +1911,17 @@
         thumb = `<div class="swap-thumb-placeholder">${compSvg}</div>`;
       }
 
-      if (isSet) {
-        html += `<div class="swap-component-item" data-picker-set="${escAttr(comp.key || comp.id)}" data-set-name="${escAttr(comp.name)}" data-set-variants='${escAttr(JSON.stringify(comp.variants || []))}'>
+      if (isSet && comp.variants && comp.variants.length > 0) {
+        // Apply default variant (first) directly
+        const defaultVariant = comp.variants[0];
+        const applyId = defaultVariant.key || defaultVariant.id || comp.key || comp.id;
+        const isCurrentSet = s.currentValue && comp.variants.some(v => (v.key === s.currentValue || v.id === s.currentValue));
+        html += `<div class="swap-component-item ${isCurrentSet ? 'current' : ''}" data-picker-apply="${escAttr(applyId)}">
           ${thumb}
           <div class="swap-comp-info">
             <div class="swap-comp-name">${escHtml(comp.name)}</div>
             <div class="swap-comp-source">${(comp.variants || []).length} variants</div>
           </div>
-          <span class="swap-item-chevron">${chevronSvg}</span>
         </div>`;
       } else {
         const isCurrentComp = s.currentValue && (comp.key === s.currentValue || comp.id === s.currentValue);
