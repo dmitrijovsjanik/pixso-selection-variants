@@ -1119,9 +1119,52 @@ pixso.ui.on("message", (msg: any) => {
 
   if (msg.type === "get-preferred-swap-values") {
     const { propertyName } = msg;
-    const values: { id: string; name: string; thumbnailDataUrl: string }[] = [];
 
-    // Step 1: Get preferredValues keys from component property definition
+    // Helper: find the current swap component via componentPropertyReferences
+    function findCurrentSwapComp(): ComponentNode | null {
+      const sel = pixso.currentPage.selection;
+      if (!sel || sel.length === 0) return null;
+      const stack: SceneNode[] = [...sel];
+      while (stack.length > 0) {
+        const node = stack.pop()!;
+        if (isInstanceNode(node) && hasChildren(node)) {
+          for (const child of node.children) {
+            if ("componentPropertyReferences" in child) {
+              const refs = (child as any).componentPropertyReferences;
+              if (refs && refs.mainComponent === propertyName && isInstanceNode(child)) {
+                return child.mainComponent;
+              }
+            }
+          }
+        }
+        if (hasChildren(node)) {
+          for (const c of node.children) stack.push(c);
+        }
+      }
+      return null;
+    }
+
+    // Helper: get component location for navigation
+    function getCompLocation(comp: ComponentNode): { sourceKey: string; containerName: string } {
+      let sourceKey = "__local__";
+      let containerName = "";
+      if (comp.remote) {
+        containerName = (comp as any).containerName || (comp as any).pageName || "";
+      } else {
+        let p: BaseNode | null = comp.parent;
+        if (p && p.type === "COMPONENT_SET") p = p.parent;
+        while (p && p.type !== "PAGE") {
+          if (p.type === "FRAME" || p.type === "SECTION") {
+            containerName = p.name;
+            break;
+          }
+          p = p.parent;
+        }
+      }
+      return { sourceKey, containerName };
+    }
+
+    // Step 1: Get preferredValues keys
     let prefKeys: string[] = [];
     const sel = pixso.currentPage.selection;
     if (sel && sel.length > 0) {
@@ -1149,13 +1192,25 @@ pixso.ui.on("message", (msg: any) => {
       }
     }
 
-    console.log("[Swap] preferredValues keys:", prefKeys.length, prefKeys);
+    // Step 2: Check if current component is in preferred values
+    const currentComp = findCurrentSwapComp();
+    let currentKeyInPreferred = false;
+    if (currentComp && prefKeys.length > 0) {
+      currentKeyInPreferred = prefKeys.includes(currentComp.key);
+    }
 
-    if (prefKeys.length > 0) {
-      // Step 2: Find these components in the document by their key
+    console.log("[Swap] prefKeys:", prefKeys.length, "currentInPref:", currentKeyInPreferred);
+
+    // Decision: show quick swap OR navigate to current component's location
+    const shouldShowQuickSwap = prefKeys.length > 0 && currentKeyInPreferred;
+
+    if (shouldShowQuickSwap) {
+      // Show quick swap list
+      const values: { id: string; name: string; thumbnailDataUrl: string }[] = [];
       const keySet = new Set(prefKeys);
       const foundKeys = new Set<string>();
 
+      // Find locally
       function findByKey(node: BaseNode) {
         if (foundKeys.size === keySet.size) return;
         if ("type" in node) {
@@ -1163,32 +1218,26 @@ pixso.ui.on("message", (msg: any) => {
             const comp = node as ComponentNode;
             if (keySet.has(comp.key)) {
               const displayName = comp.parent?.type === "COMPONENT_SET"
-                ? comp.parent.name + " / " + comp.name
-                : comp.name;
+                ? comp.parent.name + " / " + comp.name : comp.name;
               values.push({ id: comp.id, name: displayName, thumbnailDataUrl: "" });
               foundKeys.add(comp.key);
             }
           }
           if ("children" in node) {
-            for (const child of (node as any).children) {
-              findByKey(child);
-            }
+            for (const c of (node as any).children) findByKey(c);
           }
         }
       }
-
       for (const page of pixso.root.children) {
         findByKey(page);
         if (foundKeys.size === keySet.size) break;
       }
 
-      console.log("[Swap] Found locally:", foundKeys.size, "of", keySet.size);
+      // Send local results
+      pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [...values] });
 
-      // Step 3: Search subscribed libraries for missing keys
+      // Search libraries for missing
       if (foundKeys.size < keySet.size) {
-        // Send local results first
-        pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [...values] });
-
         const missingKeys = new Set(prefKeys.filter(k => !foundKeys.has(k)));
         pixso.getLibraryListAsync().then(async (libraries) => {
           for (const lib of libraries) {
@@ -1197,7 +1246,6 @@ pixso.ui.on("message", (msg: any) => {
               const assets = await pixso.getLibraryByKeyAsync(lib.key);
               for (const comp of assets.componentList) {
                 if (comp.type === "COMPONENT_SET") {
-                  // Check set key and variant keys
                   if (missingKeys.has(comp.key)) {
                     const first = comp.variants[0];
                     values.push({ id: first?.key || comp.key, name: comp.name, thumbnailDataUrl: comp.thumbnailUrl || "" });
@@ -1209,110 +1257,55 @@ pixso.ui.on("message", (msg: any) => {
                       missingKeys.delete(v.key);
                     }
                   }
-                } else {
-                  if (missingKeys.has(comp.key)) {
-                    values.push({ id: comp.key, name: comp.name, thumbnailDataUrl: comp.thumbnailUrl || "" });
-                    missingKeys.delete(comp.key);
-                  }
+                } else if (missingKeys.has(comp.key)) {
+                  values.push({ id: comp.key, name: comp.name, thumbnailDataUrl: comp.thumbnailUrl || "" });
+                  missingKeys.delete(comp.key);
                 }
                 if (missingKeys.size === 0) break;
               }
             } catch {}
           }
-          // Send updated results with library components
-          console.log("[Swap] After library search, total:", values.length);
           pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [...values] });
         });
-        return; // Don't send again below
       }
-    } else {
-      // No preferred values — find the current component's location
-      // so UI can auto-navigate to its folder in the picker
-      if (sel && sel.length > 0) {
-        let swapComp: ComponentNode | null = null;
-        const findStack: SceneNode[] = [...sel];
-        while (findStack.length > 0 && !swapComp) {
-          const node = findStack.pop()!;
-          if (isInstanceNode(node) && hasChildren(node)) {
-            for (const child of node.children) {
-              if ("componentPropertyReferences" in child) {
-                const refs = (child as any).componentPropertyReferences;
-                if (refs && refs.mainComponent === propertyName && isInstanceNode(child)) {
-                  swapComp = child.mainComponent;
-                  break;
-                }
-              }
-            }
-          }
-          if (!swapComp && hasChildren(node)) {
-            for (const c of node.children) findStack.push(c);
-          }
-        }
 
-        if (swapComp) {
-          // Determine source and container
-          let sourceKey = "__local__";
-          let containerName = "";
-
-          if (swapComp.remote) {
-            // Remote component — get library info
-            containerName = (swapComp as any).containerName || (swapComp as any).pageName || "";
-            // We'll send the info, UI will match against sources
-          } else {
-            // Local component — find container frame name
-            let p: BaseNode | null = swapComp.parent;
-            if (p && p.type === "COMPONENT_SET") p = p.parent;
-            // Walk up to find a named frame
-            while (p && p.type !== "PAGE") {
-              if (p.type === "FRAME" || p.type === "SECTION") {
-                containerName = p.name;
-                break;
-              }
-              p = p.parent;
-            }
-          }
-
-          console.log("[Swap] Current component location: source=", sourceKey, "container=", containerName);
-
-          // Send location info so UI can auto-navigate
-          pixso.ui.postMessage({
-            type: "preferred-swap-values",
-            propertyName,
-            values: [],
-            navigateTo: { sourceKey, containerName },
-          });
-          return;
-        }
-      }
-    }
-
-    console.log("[Swap Picker] Total quick swap options:", values.length);
-    pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values });
-
-    // Lazy-load thumbnails for quick swap values
-    if (values.length > 0) {
-      const thumbIds = values.map(v => v.id);
-      Promise.all(
-        thumbIds.map(async (id) => {
+      // Lazy-load thumbnails for local values
+      const localIds = values.filter(v => !v.thumbnailDataUrl).map(v => v.id);
+      if (localIds.length > 0) {
+        Promise.all(localIds.map(async (id) => {
           try {
             const node = pixso.getNodeById(id);
             if (node && "exportAsync" in node) {
               const bytes = await (node as any).exportAsync({
-                format: "PNG",
-                constraint: { type: "HEIGHT", value: 32 },
+                format: "PNG", constraint: { type: "HEIGHT", value: 32 },
               } as ExportSettingsImage);
               return { id, dataUrl: `data:image/png;base64,${pixso.base64Encode(bytes)}` };
             }
           } catch {}
           return null;
-        })
-      ).then((results) => {
-        const updated = values.map(v => {
-          const thumb = results.find(r => r && r.id === v.id);
-          return { ...v, thumbnailDataUrl: thumb ? thumb.dataUrl : "" };
+        })).then((results) => {
+          const updated = values.map(v => {
+            const thumb = results.find(r => r && r.id === v.id);
+            return thumb ? { ...v, thumbnailDataUrl: thumb.dataUrl } : v;
+          });
+          pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: updated });
         });
-        pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: updated });
-      });
+      }
+    } else {
+      // Navigate to current component's location
+      if (currentComp) {
+        const loc = getCompLocation(currentComp);
+        console.log("[Swap] Navigate to:", loc.sourceKey, loc.containerName);
+        pixso.ui.postMessage({
+          type: "preferred-swap-values",
+          propertyName,
+          values: [],
+          navigateTo: loc,
+        });
+      } else {
+        // Nothing found
+        pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [] });
+      }
     }
   }
 
