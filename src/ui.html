@@ -505,6 +505,21 @@
     border-color: var(--brand-9);
   }
 
+  .swap-picker-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--neutral-3);
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+
+  .swap-picker-nav:hover {
+    background: var(--neutral-2);
+  }
+
   .swap-picker-body {
     flex: 1;
     overflow-y: auto;
@@ -1747,17 +1762,28 @@
       }
     }
 
-    let html = `<div class="swap-picker-header" id="swap-picker-back">
+    // Close bar — always visible at top
+    let html = `<div class="swap-picker-header" id="swap-picker-close">
       <span class="go-up-icon">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 15l-6-6-6 6"/></svg>
       </span>
-      <span class="swap-picker-title">${escHtml(title)}</span>
+      <span class="swap-picker-title">Close component picker</span>
     </div>`;
 
     html += `<div class="swap-picker-search">
       <input type="text" id="swap-picker-search-input" placeholder="Search..." value="${escAttr(s.searchQuery || '')}" />
       <select class="swap-source-select" id="swap-source-select">${sourceOptions}</select>
     </div>`;
+
+    // Folder navigation bar — shows when inside folders/sub-folders
+    if (s.history.length > 0) {
+      html += `<div class="swap-picker-nav" id="swap-picker-back">
+        <span class="go-up-icon">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+        </span>
+        <span class="go-up-label">${escHtml(title)}</span>
+      </div>`;
+    }
 
     html += `<div class="swap-picker-body" id="swap-picker-body">`;
     html += renderSwapPickerBodyContent();
@@ -1766,7 +1792,12 @@
     picker.innerHTML = html;
 
     // Back
-    document.getElementById('swap-picker-back').addEventListener('click', navigateSwapBack);
+    // Close picker
+    document.getElementById('swap-picker-close').addEventListener('click', closeSwapPicker);
+
+    // Navigate back in folders
+    const backBtn = document.getElementById('swap-picker-back');
+    if (backBtn) backBtn.addEventListener('click', navigateSwapBack);
 
     // Source select
     document.getElementById('swap-source-select').addEventListener('change', (e) => {
