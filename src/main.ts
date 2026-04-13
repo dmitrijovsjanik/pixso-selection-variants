@@ -227,11 +227,10 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
       }
 
       const swapChild = findSwapChild(instance);
+      console.log("[SwapName]", propName, "value=", propValue.value, "findSwapChild=", swapChild?.type, swapChild?.name, "getNodeById=", pixso.getNodeById(propValue.value)?.type, pixso.getNodeById(propValue.value)?.name);
 
       if (swapChild) {
-        // Use the layer name — this is what designer sees
         info.currentValueName = swapChild.name;
-        // Add component info as source
         if (isInstanceNode(swapChild)) {
           const mc = swapChild.mainComponent;
           if (mc) {
@@ -241,7 +240,6 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
           }
         }
       } else {
-        // Fallback: try getNodeById on the value
         const swapNode = pixso.getNodeById(propValue.value);
         if (swapNode) {
           info.currentValueName = swapNode.name;
