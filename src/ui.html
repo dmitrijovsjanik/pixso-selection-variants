@@ -508,30 +508,43 @@
     font-weight: 600;
   }
 
-  .summary-text {
-    flex: 1;
+  /* ─── Back to parent navigation bar ─── */
+  .nav-back-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--neutral-0);
+    border-bottom: 1px solid var(--neutral-3);
+    position: sticky;
+    top: 34px;
+    z-index: 6;
+    cursor: pointer;
+    transition: background var(--transition-fast);
   }
 
-  .btn-back-selection {
+  .nav-back-bar:hover {
+    background: var(--neutral-2);
+  }
+
+  .nav-back-bar .btn-back {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 3px 8px;
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--neutral-11);
-    background: var(--neutral-a-3);
+    justify-content: center;
+    width: 24px;
+    height: 24px;
     border: none;
-    border-radius: var(--radius-full);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    font-family: inherit;
+    background: var(--neutral-a-3);
+    border-radius: var(--radius-md);
+    color: var(--neutral-11);
     flex-shrink: 0;
+    pointer-events: none;
   }
 
-  .btn-back-selection:hover {
-    background: var(--neutral-a-4);
-    color: var(--neutral-12);
+  .nav-back-bar .nav-back-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--neutral-11);
   }
 </style>
 </head>
@@ -760,13 +773,18 @@
     }
 
     // ─── Bulk list view (main) ───
-    const backBtn = hasPreviousSelection
-      ? `<button class="btn-back-selection" data-restore-selection>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
-          Back
-        </button>`
-      : '';
-    let html = `<div class="summary-bar"><span class="summary-text"><strong>${data.instances.length}</strong> instance${data.instances.length > 1 ? 's' : ''} from <strong>${names.length}</strong> component${names.length > 1 ? 's' : ''}</span>${backBtn}</div>`;
+    let html = '';
+
+    if (hasPreviousSelection) {
+      html += `<div class="nav-back-bar" data-restore-selection>
+        <span class="btn-back">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+        </span>
+        <span class="nav-back-label">Back to parent selection</span>
+      </div>`;
+    }
+
+    html += `<div class="summary-bar"><strong>${data.instances.length}</strong> instance${data.instances.length > 1 ? 's' : ''} from <strong>${names.length}</strong> component${names.length > 1 ? 's' : ''}</div>`;
 
     for (const compName of names) {
       const instances = groups[compName];
@@ -893,13 +911,18 @@
       return;
     }
 
-    const backBtn2 = hasPreviousSelection
-      ? `<button class="btn-back-selection" data-restore-selection>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
-          Back
-        </button>`
-      : '';
-    let html = `<div class="summary-bar"><span class="summary-text"><strong>${data.instances.length}</strong> instance${data.instances.length > 1 ? 's' : ''} from <strong>${names.length}</strong> component${names.length > 1 ? 's' : ''}</span>${backBtn2}</div>`;
+    let html = '';
+
+    if (hasPreviousSelection) {
+      html += `<div class="nav-back-bar" data-restore-selection>
+        <span class="btn-back">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+        </span>
+        <span class="nav-back-label">Back to parent selection</span>
+      </div>`;
+    }
+
+    html += `<div class="summary-bar"><strong>${data.instances.length}</strong> instance${data.instances.length > 1 ? 's' : ''} from <strong>${names.length}</strong> component${names.length > 1 ? 's' : ''}</div>`;
 
     for (const compName of names) {
       const instances = groups[compName];
