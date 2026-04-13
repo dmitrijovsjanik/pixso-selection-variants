@@ -33,6 +33,7 @@ interface InstanceInfo {
   componentName: string;
   componentId: string | null;
   depth: number; // nesting level
+  visible: boolean;
   variantProperties: VariantProperty[];
   componentProperties: ComponentPropertyInfo[];
   path: string; // parent chain for display
@@ -260,6 +261,7 @@ function analyzeSelectionSync(): SelectionData {
         componentName: getComponentDisplayName(node),
         componentId: mainComponent?.id ?? null,
         depth,
+        visible: node.visible,
         variantProperties: getVariantProperties(node),
         componentProperties: getComponentProperties(node),
         path: getNodePath(node),
@@ -322,6 +324,7 @@ function analyzeSelectionAsync(onDone: (data: SelectionData) => void) {
           componentName: getComponentDisplayName(node),
           componentId: mainComponent?.id ?? null,
           depth,
+          visible: node.visible,
           variantProperties: getVariantProperties(node),
           componentProperties: getComponentProperties(node),
           path: getNodePath(node),

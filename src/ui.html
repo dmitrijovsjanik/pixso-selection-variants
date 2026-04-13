@@ -377,6 +377,15 @@
     text-align: center;
   }
 
+  /* ─── Hidden layer icon ─── */
+  .hidden-icon {
+    display: inline-flex;
+    align-items: center;
+    color: var(--neutral-5);
+    flex-shrink: 0;
+    margin-left: 2px;
+  }
+
   /* ─── Swap Picker Panel ─── */
   .swap-picker {
     position: fixed;
@@ -1248,6 +1257,9 @@
 
       const merged = getMergedProperties(instances);
       const firstThumb = thumbnailCache[instances[0]?.id] || '';
+      const someHidden = instances.some(i => !i.visible);
+      const allHidden = instances.every(i => !i.visible);
+      const hiddenIcon = `<span class="hidden-icon" title="${allHidden ? 'All instances hidden' : 'Some instances hidden'}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></span>`;
 
       html += `<div class="component-group">`;
       html += `<div class="component-header" data-toggle>
@@ -1255,6 +1267,7 @@
           <span class="collapse-arrow"></span>
           <img class="instance-thumb" data-thumb-id="${escAttr(instances[0]?.id || '')}" src="${firstThumb}" style="${firstThumb ? '' : 'display:none'}" />
           ${escHtml(compName)}
+          ${someHidden ? hiddenIcon : ''}
         </span>
         <div class="component-actions">
           ${instances.length > 1 ? `<button class="btn-instances" data-open-detail="${escAttr(compName)}">
@@ -1322,6 +1335,7 @@
           <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
         </svg>
         <span class="detail-instance-name">${escHtml(inst.name)}</span>
+        ${!inst.visible ? `<span class="hidden-icon" title="Hidden layer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></span>` : ''}
       </div>`;
 
       html += `<div class="detail-instance-body"><div class="properties">`;
@@ -1393,6 +1407,7 @@
             <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
           </svg>
           ${escHtml(inst.name)}
+          ${!inst.visible ? `<span class="hidden-icon" title="Hidden"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></span>` : ''}
           ${inst.depth > 0 ? `<span style="color:#bbb;font-size:10px">depth ${inst.depth}</span>` : ''}
         </div>`;
         if (inst.path) {
