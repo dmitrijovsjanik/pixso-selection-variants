@@ -59,7 +59,7 @@
     display: flex;
     background: var(--neutral-a-2);
     position: sticky;
-    top: 0;
+    top: 35px;
     z-index: 10;
     padding: 3px;
     gap: 2px;
@@ -519,8 +519,8 @@
     cursor: pointer;
     transition: background var(--transition-fast);
     position: sticky;
-    top: 34px;
-    z-index: 6;
+    top: 0;
+    z-index: 20;
   }
 
   .go-up-bar:hover {
@@ -561,6 +561,13 @@
 </head>
 <body>
 
+<div id="go-up-bar" class="go-up-bar disabled">
+  <span class="go-up-icon">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 15l-6-6-6 6"/></svg>
+  </span>
+  <span class="go-up-label">Parent Selection</span>
+</div>
+
 <div class="tabs">
   <div class="tab active" data-tab="variants">Variants</div>
   <div class="tab" data-tab="instances">Instances</div>
@@ -583,6 +590,13 @@
       tab.classList.add('active');
       document.getElementById(tab.dataset.tab + '-tab').classList.add('active');
     });
+  });
+
+  // ─── Go up button (permanent, not re-rendered) ───
+  document.getElementById('go-up-bar').addEventListener('click', () => {
+    if (parentInfo) {
+      postMsg({ type: 'go-up' });
+    }
   });
 
   // ─── Post message to sandbox ───
@@ -628,16 +642,17 @@
     return { on: prop.options.find(o => o.toLowerCase() === 'yes'), off: prop.options.find(o => o.toLowerCase() === 'no') };
   }
 
-  // ─── Render "go up" bar ───
-  function renderGoUpBar() {
-    const disabled = !parentInfo;
-    const label = parentInfo ? parentInfo.name : 'No parent';
-    return `<div class="go-up-bar ${disabled ? 'disabled' : ''}" ${disabled ? '' : 'data-go-up'}>
-      <span class="go-up-icon">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 15l-6-6-6 6"/></svg>
-      </span>
-      <span class="go-up-label">${escHtml(label)}</span>
-    </div>`;
+  // ─── Update "go up" bar (always in DOM, just update state) ───
+  function updateGoUpBar() {
+    const bar = document.getElementById('go-up-bar');
+    if (!bar) return;
+    if (parentInfo) {
+      bar.classList.remove('disabled');
+      bar.querySelector('.go-up-label').textContent = parentInfo.name;
+    } else {
+      bar.classList.add('disabled');
+      bar.querySelector('.go-up-label').textContent = 'Parent Selection';
+    }
   }
 
   // ─── Render a property control ───
@@ -796,7 +811,7 @@
     }
 
     // ─── Bulk list view (main) ───
-    let html = renderGoUpBar();
+    let html = '';
     html += `<div class="summary-bar"><strong>${data.instances.length}</strong> instance${data.instances.length > 1 ? 's' : ''} from <strong>${names.length}</strong> component${names.length > 1 ? 's' : ''}</div>`;
 
     for (const compName of names) {
@@ -924,7 +939,7 @@
       return;
     }
 
-    let html = renderGoUpBar();
+    let html = '';
     html += `<div class="summary-bar"><strong>${data.instances.length}</strong> instance${data.instances.length > 1 ? 's' : ''} from <strong>${names.length}</strong> component${names.length > 1 ? 's' : ''}</div>`;
 
     for (const compName of names) {
@@ -976,13 +991,6 @@
       });
     });
 
-    // Go up one level
-    document.querySelectorAll('[data-go-up]').forEach(el => {
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        postMsg({ type: 'go-up' });
-      });
-    });
 
     // Open detail view for a component
     document.querySelectorAll('[data-open-detail]').forEach(el => {
@@ -1088,6 +1096,7 @@
     if (msg.type === 'selection-data') {
       currentData = msg.data;
       parentInfo = msg.parentInfo || null;
+      updateGoUpBar();
       renderVariantsTab(currentData);
       renderInstancesTab(currentData);
     }
