@@ -426,6 +426,12 @@
     padding: 8px 12px;
     border-bottom: 1px solid var(--neutral-3);
     flex-shrink: 0;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+
+  .swap-picker-header:hover {
+    background: var(--neutral-2);
   }
 
   .swap-picker-title {
@@ -781,11 +787,17 @@
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    background: var(--neutral-1);
+    background: var(--neutral-0);
     border-bottom: 1px solid var(--neutral-3);
     position: sticky;
     top: 69px;
     z-index: 5;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+
+  .detail-header:hover {
+    background: var(--neutral-2);
   }
 
   .btn-back {
@@ -1370,10 +1382,10 @@
     let html = `<div class="detail-view">`;
 
     // Header with back button
-    html += `<div class="detail-header">
-      <button class="btn-back" data-back-to-bulk title="Back to bulk view">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
-      </button>
+    html += `<div class="detail-header" data-back-to-bulk>
+      <span class="go-up-icon">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+      </span>
       <span class="detail-title">${escHtml(compName)}</span>
       <span class="detail-count">${instances.length} instances</span>
     </div>`;
@@ -1735,10 +1747,10 @@
       }
     }
 
-    let html = `<div class="swap-picker-header">
-      <button class="btn-back" id="swap-picker-back">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
-      </button>
+    let html = `<div class="swap-picker-header" id="swap-picker-back">
+      <span class="go-up-icon">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+      </span>
       <span class="swap-picker-title">${escHtml(title)}</span>
     </div>`;
 
