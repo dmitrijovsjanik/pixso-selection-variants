@@ -1160,11 +1160,15 @@
     if (!msg) return;
 
     if (msg.type === 'loading') {
-      const count = msg.layerCount || 0;
-      const detail = count > 0 ? `Scanning ${count} layers...` : 'Loading...';
-      const loadingHtml = `<div class="loading-state"><div class="spinner"></div>${escHtml(detail)}</div>`;
+      const loadingHtml = `<div class="loading-state"><div class="spinner"></div><span class="loading-text">Scanning...</span></div>`;
       document.getElementById('variants-tab').innerHTML = loadingHtml;
       document.getElementById('instances-tab').innerHTML = loadingHtml;
+    }
+
+    if (msg.type === 'scan-progress') {
+      document.querySelectorAll('.loading-text').forEach(el => {
+        el.textContent = `Scanned ${msg.scanned} layers · ${msg.found} instances found`;
+      });
     }
 
     if (msg.type === 'selection-data') {

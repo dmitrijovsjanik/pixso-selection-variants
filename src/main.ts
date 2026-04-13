@@ -145,39 +145,6 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
   return props;
 }
 
-function collectInstances(
-  nodes: readonly SceneNode[],
-  depth: number = 0,
-  results: InstanceInfo[] = []
-): InstanceInfo[] {
-  for (const node of nodes) {
-    if (isInstanceNode(node)) {
-      const mainComponent = node.mainComponent;
-      const componentName = getComponentDisplayName(node);
-      const componentId = mainComponent?.id ?? null;
-
-      results.push({
-        id: node.id,
-        name: node.name,
-        componentName,
-        componentId,
-        depth,
-        variantProperties: getVariantProperties(node),
-        componentProperties: getComponentProperties(node),
-        path: getNodePath(node),
-      });
-
-      // Also recurse into nested instances
-      if (hasChildren(node)) {
-        collectInstances(node.children, depth + 1, results);
-      }
-    } else if (hasChildren(node)) {
-      collectInstances(node.children, depth + 1, results);
-    }
-  }
-  return results;
-}
-
 function groupByComponent(instances: InstanceInfo[]): { [key: string]: InstanceInfo[] } {
   const grouped: { [key: string]: InstanceInfo[] } = {};
   for (const inst of instances) {
@@ -188,49 +155,131 @@ function groupByComponent(instances: InstanceInfo[]): { [key: string]: InstanceI
   return grouped;
 }
 
-function analyzeSelection(): SelectionData {
+// Synchronous version for quick updates (property changes)
+function analyzeSelectionSync(): SelectionData {
   const selection = pixso.currentPage.selection;
   if (!selection || selection.length === 0) {
-    return {
-      instances: [],
-      groupedByComponent: {},
-      totalSelected: 0,
-      hasSelection: false,
-    };
+    return { instances: [], groupedByComponent: {}, totalSelected: 0, hasSelection: false };
   }
 
-  // Collect all instances including top-level selected instances
-  const allInstances: InstanceInfo[] = [];
+  const results: InstanceInfo[] = [];
+  const stack: { node: SceneNode; depth: number }[] = [];
 
-  for (const node of selection) {
+  // Seed stack
+  for (let i = selection.length - 1; i >= 0; i--) {
+    stack.push({ node: selection[i], depth: 0 });
+  }
+
+  while (stack.length > 0) {
+    const { node, depth } = stack.pop()!;
+
     if (isInstanceNode(node)) {
-      // The selected node itself is an instance — include it at depth 0
       const mainComponent = node.mainComponent;
-      allInstances.push({
+      results.push({
         id: node.id,
         name: node.name,
         componentName: getComponentDisplayName(node),
         componentId: mainComponent?.id ?? null,
-        depth: 0,
+        depth,
         variantProperties: getVariantProperties(node),
         componentProperties: getComponentProperties(node),
         path: getNodePath(node),
       });
-      // Also recurse into children
       if (hasChildren(node)) {
-        collectInstances(node.children, 1, allInstances);
+        for (let i = node.children.length - 1; i >= 0; i--) {
+          stack.push({ node: node.children[i], depth: depth + 1 });
+        }
       }
     } else if (hasChildren(node)) {
-      collectInstances(node.children, 0, allInstances);
+      for (let i = node.children.length - 1; i >= 0; i--) {
+        stack.push({ node: node.children[i], depth: depth + 1 });
+      }
     }
   }
 
   return {
-    instances: allInstances,
-    groupedByComponent: groupByComponent(allInstances),
+    instances: results,
+    groupedByComponent: groupByComponent(results),
     totalSelected: selection.length,
     hasSelection: true,
   };
+}
+
+// Async version with progress reporting
+let analyzeAbortFlag = 0;
+
+function analyzeSelectionAsync(onDone: (data: SelectionData) => void) {
+  const selection = pixso.currentPage.selection;
+  if (!selection || selection.length === 0) {
+    onDone({ instances: [], groupedByComponent: {}, totalSelected: 0, hasSelection: false });
+    return;
+  }
+
+  const myFlag = ++analyzeAbortFlag;
+  const results: InstanceInfo[] = [];
+  const stack: { node: SceneNode; depth: number }[] = [];
+
+  for (let i = selection.length - 1; i >= 0; i--) {
+    stack.push({ node: selection[i], depth: 0 });
+  }
+
+  let scanned = 0;
+  const CHUNK_SIZE = 50;
+
+  function processChunk() {
+    if (myFlag !== analyzeAbortFlag) return; // aborted
+
+    let processed = 0;
+    while (stack.length > 0 && processed < CHUNK_SIZE) {
+      const { node, depth } = stack.pop()!;
+      scanned++;
+      processed++;
+
+      if (isInstanceNode(node)) {
+        const mainComponent = node.mainComponent;
+        results.push({
+          id: node.id,
+          name: node.name,
+          componentName: getComponentDisplayName(node),
+          componentId: mainComponent?.id ?? null,
+          depth,
+          variantProperties: getVariantProperties(node),
+          componentProperties: getComponentProperties(node),
+          path: getNodePath(node),
+        });
+        if (hasChildren(node)) {
+          for (let i = node.children.length - 1; i >= 0; i--) {
+            stack.push({ node: node.children[i], depth: depth + 1 });
+          }
+        }
+      } else if (hasChildren(node)) {
+        for (let i = node.children.length - 1; i >= 0; i--) {
+          stack.push({ node: node.children[i], depth: depth + 1 });
+        }
+      }
+    }
+
+    // Send progress
+    pixso.ui.postMessage({
+      type: "scan-progress",
+      scanned,
+      found: results.length,
+    });
+
+    if (stack.length > 0) {
+      setTimeout(processChunk, 0);
+    } else {
+      // Done
+      onDone({
+        instances: results,
+        groupedByComponent: groupByComponent(results),
+        totalSelected: selection.length,
+        hasSelection: true,
+      });
+    }
+  }
+
+  setTimeout(processChunk, 0);
 }
 
 // ─── Find the variant ComponentNode matching desired property values ───
@@ -292,21 +341,9 @@ function getParentInfo(): { id: string; name: string } | null {
   return { id: parent.id, name: parent.name };
 }
 
-// Quick count of total child nodes (fast, no property reading)
-function quickCountNodes(nodes: readonly SceneNode[]): number {
-  let count = 0;
-  for (const node of nodes) {
-    count++;
-    if (hasChildren(node)) {
-      count += quickCountNodes(node.children);
-    }
-  }
-  return count;
-}
-
-// Send data immediately (used after property changes)
+// Send data immediately (used after property changes — sync, no loading)
 function sendSelectionData() {
-  const data = analyzeSelection();
+  const data = analyzeSelectionSync();
   const parentInfo = getParentInfo();
   pixso.ui.postMessage({
     type: "selection-data",
@@ -315,15 +352,18 @@ function sendSelectionData() {
   });
 }
 
-// Send loading state then compute data (used on selection change)
+// Send with loading + live progress (used on selection change)
 function sendLoadingThenData() {
-  const sel = pixso.currentPage.selection;
-  const layerCount = sel && sel.length > 0 ? quickCountNodes(sel) : 0;
-  pixso.ui.postMessage({ type: "loading", layerCount });
+  pixso.ui.postMessage({ type: "loading" });
 
-  setTimeout(() => {
-    sendSelectionData();
-  }, 10);
+  analyzeSelectionAsync((data) => {
+    const parentInfo = getParentInfo();
+    pixso.ui.postMessage({
+      type: "selection-data",
+      data,
+      parentInfo,
+    });
+  });
 }
 
 sendLoadingThenData();
@@ -342,8 +382,8 @@ pixso.ui.on("message", (msg: any) => {
     if (!instanceNode || instanceNode.type !== "INSTANCE") return;
 
     // Find the instance info to get current variant props
-    const data = analyzeSelection();
-    const instInfo = data.instances.find((i) => i.id === instanceId);
+    const data = analyzeSelectionSync();
+    const instInfo = data.instances.find((i: InstanceInfo) => i.id === instanceId);
     if (!instInfo) return;
 
     const targetComponent = findVariantComponent(instInfo, propertyName, newValue);
@@ -369,7 +409,7 @@ pixso.ui.on("message", (msg: any) => {
   if (msg.type === "bulk-set-variant") {
     // Set variant property on ALL instances of the same component
     const { componentName, propertyName, newValue } = msg;
-    const data = analyzeSelection();
+    const data = analyzeSelectionSync();
     const targetInstances = data.groupedByComponent[componentName] ?? [];
 
     for (const instInfo of targetInstances) {
@@ -389,7 +429,7 @@ pixso.ui.on("message", (msg: any) => {
 
   if (msg.type === "bulk-set-component-property") {
     const { componentName, propertyName, newValue } = msg;
-    const data = analyzeSelection();
+    const data = analyzeSelectionSync();
     const targetInstances = data.groupedByComponent[componentName] ?? [];
 
     for (const instInfo of targetInstances) {
@@ -412,7 +452,7 @@ pixso.ui.on("message", (msg: any) => {
 
   if (msg.type === "select-instances-by-component") {
     const { componentName } = msg;
-    const data = analyzeSelection();
+    const data = analyzeSelectionSync();
     const targetInstances = data.groupedByComponent[componentName] ?? [];
     const nodes: SceneNode[] = [];
     for (const inst of targetInstances) {
