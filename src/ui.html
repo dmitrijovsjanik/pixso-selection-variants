@@ -1664,6 +1664,11 @@
     s.currentFolder = found.folderName;
     s.currentSubPath = subPath;
 
+    // Set currentValue to componentKey for highlighting
+    if (s.findComponentKey) {
+      s.currentValue = s.findComponentKey;
+    }
+
     // Push history for proper back navigation
     s.history = [];
     s.history.push({ level: 'folders', currentFolder: null, currentSubPath: null, currentSet: null });
@@ -1671,11 +1676,7 @@
       s.history.push({ level: 'components', currentFolder: found.folderName, currentSubPath: null, currentSet: null });
     }
 
-    // Update dropdown
-    const selectEl = document.getElementById('swap-source-select');
-    if (selectEl) selectEl.value = found.sourceKey;
-
-    renderSwapPicker(); // full re-render to update dropdown + body
+    renderSwapPicker(); // full re-render to update dropdown + nav + body
   }
 
   // ─── Bind click on swap search result items ───
@@ -1725,23 +1726,7 @@
     swapPickerState.level = level;
     Object.assign(swapPickerState, data);
     swapPickerState.searchResults = null;
-    renderSwapPickerBody();
-    // Update title
-    const titleEl = document.querySelector('.swap-picker-title');
-    if (titleEl) {
-      const subPath = swapPickerState.currentSubPath;
-      if (subPath) {
-        // Show last segment of sub-path
-        const parts = subPath.split(' / ');
-        titleEl.textContent = parts[parts.length - 1];
-      } else if (level === 'components' && data.currentFolder) {
-        titleEl.textContent = data.currentFolder;
-      } else if (level === 'variants' && data.currentSet) {
-        titleEl.textContent = data.currentSet.name;
-      } else {
-        titleEl.textContent = 'Choose component';
-      }
-    }
+    renderSwapPicker(); // full re-render to update nav bar + body
   }
 
   function navigateSwapBack() {
@@ -1756,19 +1741,7 @@
     swapPickerState.currentSubPath = prev.currentSubPath;
     swapPickerState.currentSet = prev.currentSet;
     swapPickerState.searchResults = null;
-    renderSwapPickerBody();
-    // Update title
-    const titleEl = document.querySelector('.swap-picker-title');
-    if (titleEl) {
-      if (prev.currentSubPath) {
-        const parts = prev.currentSubPath.split(' / ');
-        titleEl.textContent = parts[parts.length - 1];
-      } else if (prev.currentFolder) {
-        titleEl.textContent = prev.currentFolder;
-      } else {
-        titleEl.textContent = 'Choose component';
-      }
-    }
+    renderSwapPicker(); // full re-render to update nav bar
   }
 
   function applySwapFromPicker(componentIdOrKey) {
@@ -1795,7 +1768,14 @@
     }
 
     let title = 'Choose component';
-    if (s.level === 'components' && s.currentFolder) title = s.currentFolder;
+    if (s.level === 'components') {
+      if (s.currentSubPath) {
+        const parts = s.currentSubPath.split(' / ');
+        title = parts[parts.length - 1];
+      } else if (s.currentFolder) {
+        title = s.currentFolder;
+      }
+    }
     if (s.level === 'variants' && s.currentSet) title = s.currentSet.name;
 
     // Source dropdown options
@@ -2303,13 +2283,8 @@
           const found = findComponentInCache(compKey, subPath);
           if (found) {
             applyFoundComponent(found, subPath);
-          } else {
-            // Will be found when source data arrives
-            swapPickerState.level = 'folders';
-            swapPickerState.selectedSource = '__local__';
-            const selectEl = document.getElementById('swap-source-select');
-            if (selectEl) selectEl.value = '__local__';
           }
+          // If not found yet — show loading, will navigate when data arrives
           renderSwapPickerBody();
         } else if (msg.values.length === 0 && !msg.navigateTo && swapPickerState.level === 'quickswap') {
           // No quick swap, no navigateTo — go to first source
