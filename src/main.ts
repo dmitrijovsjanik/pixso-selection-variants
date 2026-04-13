@@ -295,7 +295,9 @@ pixso.ui.on("message", (msg: any) => {
 
     const targetComponent = findVariantComponent(instInfo, propertyName, newValue);
     if (targetComponent) {
+      const wasVisible = instanceNode.visible;
       instanceNode.swapComponent(targetComponent);
+      instanceNode.visible = wasVisible;
     }
 
     sendSelectionData();
@@ -323,7 +325,9 @@ pixso.ui.on("message", (msg: any) => {
 
       const targetComponent = findVariantComponent(instInfo, propertyName, newValue);
       if (targetComponent) {
+        const wasVisible = instanceNode.visible;
         instanceNode.swapComponent(targetComponent);
+        instanceNode.visible = wasVisible;
       }
     }
 
