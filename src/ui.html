@@ -2249,6 +2249,18 @@
           selectEl.innerHTML = opts;
           selectEl.value = swapPickerState.selectedSource;
         }
+
+        // If we're waiting to find a component — load all sources now
+        if (swapPickerState.findComponentKey) {
+          if (!swapPickerState.libraryCache['__local__']) {
+            postMsg({ type: 'get-local-components' });
+          }
+          for (const src of msg.sources) {
+            if (src.type === 'library' && !swapPickerState.libraryCache[src.key]) {
+              postMsg({ type: 'get-library-contents', libraryKey: src.key });
+            }
+          }
+        }
       }
     }
 
