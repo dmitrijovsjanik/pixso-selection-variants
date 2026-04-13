@@ -1032,7 +1032,10 @@ pixso.ui.on("message", (msg: any) => {
       }
     }
 
-    walkForComponents(pixso.currentPage, "Page");
+    // Walk ALL pages, not just current
+    for (const page of pixso.root.children) {
+      walkForComponents(page, page.name);
+    }
 
     const folders = Object.entries(folderMap).map(([name, components]) => ({
       name,
