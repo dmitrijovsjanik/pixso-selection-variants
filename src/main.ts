@@ -131,6 +131,8 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
 
   for (const [propName, propValue] of Object.entries(compProps)) {
     const def = definitions?.[propName];
+    // Only show properties defined on this component level, not nested/exposed ones
+    if (!def) continue;
     const info: ComponentPropertyInfo = {
       name: propName,
       type: propValue.type,
