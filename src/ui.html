@@ -878,7 +878,8 @@
     }
 
     if (prop.type === 'INSTANCE_SWAP') {
-      const displayName = prop.currentValueName || String(prop.currentValue).substring(0, 12) + '...';
+      const rawVal = String(prop.currentValue);
+      const displayName = prop.currentValueName || (rawVal.length > 16 ? 'Instance Swap' : rawVal);
       const swapData = isBulk
         ? `data-swap-component="${escAttr(componentName)}" data-swap-prop="${escAttr(prop.name)}"`
         : `data-swap-instance="${escAttr(instanceId)}" data-swap-prop="${escAttr(prop.name)}"`;
@@ -994,11 +995,13 @@
       if (!hasVariants && !hasCompProps) continue;
 
       const merged = getMergedProperties(instances);
+      const firstThumb = thumbnailCache[instances[0]?.id] || '';
 
       html += `<div class="component-group">`;
       html += `<div class="component-header" data-toggle>
         <span class="component-name">
           <span class="collapse-arrow"></span>
+          <img class="instance-thumb" data-thumb-id="${escAttr(instances[0]?.id || '')}" src="${firstThumb}" style="${firstThumb ? '' : 'display:none'}" />
           ${escHtml(compName)}
         </span>
         <div class="component-actions">
@@ -1113,11 +1116,13 @@
 
     for (const compName of names) {
       const instances = groups[compName];
+      const instThumb = thumbnailCache[instances[0]?.id] || '';
 
       html += `<div class="component-group">`;
       html += `<div class="component-header" data-toggle>
         <span class="component-name">
           <span class="collapse-arrow"></span>
+          <img class="instance-thumb" data-thumb-id="${escAttr(instances[0]?.id || '')}" src="${instThumb}" style="${instThumb ? '' : 'display:none'}" />
           ${escHtml(compName)}
         </span>
         <div class="component-actions">

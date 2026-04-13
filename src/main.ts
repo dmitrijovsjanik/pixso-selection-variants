@@ -425,9 +425,40 @@ async function resolveSwapOptions(data: SelectionData) {
   }
 }
 
+// Resolve unresolved INSTANCE_SWAP names by trying to find the node
+// through parent instance's children
+function resolveSwapNames(data: SelectionData) {
+  for (const inst of data.instances) {
+    for (const cp of inst.componentProperties) {
+      if (cp.type === "INSTANCE_SWAP" && !cp.currentValueName && typeof cp.currentValue === "string") {
+        // Try: the value might be a node ID of an instance's mainComponent
+        // Walk the instance's children to find the matching component reference
+        const instNode = pixso.getNodeById(inst.id) as InstanceNode | null;
+        if (instNode && hasChildren(instNode)) {
+          for (const child of instNode.children) {
+            if (isInstanceNode(child)) {
+              const mc = child.mainComponent;
+              if (mc && mc.id === cp.currentValue) {
+                const mcParent = mc.parent;
+                if (mcParent && mcParent.type === "COMPONENT_SET") {
+                  cp.currentValueName = mcParent.name + " / " + mc.name;
+                } else {
+                  cp.currentValueName = mc.name;
+                }
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 // Send data immediately (used after property changes — sync, no loading)
 function sendSelectionData() {
   const data = analyzeSelectionSync();
+  resolveSwapNames(data);
   const parentInfo = getParentInfo();
   pixso.ui.postMessage({
     type: "selection-data",
