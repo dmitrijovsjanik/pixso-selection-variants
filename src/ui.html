@@ -886,7 +886,7 @@
         </span>
         <div class="component-actions">
           ${instances.length > 1 ? `<button class="btn-instances" data-open-detail="${escAttr(compName)}">
-            <span class="component-count">${instances.length}</span>
+            ${instances.length} · Edit each
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
           </button>` : ''}
           <button class="btn-icon" title="Select all instances" data-select-component="${escAttr(compName)}">
