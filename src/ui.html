@@ -4,6 +4,41 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
+  /* ─── fast.ui.kit tokens ─── */
+  :root {
+    --brand-3: #f3e7fe;
+    --brand-5: #d9b8fc;
+    --brand-9: #b750ff;
+    --brand-10: #a043e6;
+    --brand-11: #8839bf;
+    --brand-a-3: rgba(183, 80, 255, 0.12);
+    --brand-a-4: rgba(183, 80, 255, 0.18);
+    --neutral-0: #ffffff;
+    --neutral-1: #fbfbfb;
+    --neutral-2: #f5f5f5;
+    --neutral-3: #eeeeee;
+    --neutral-4: #e5e5e5;
+    --neutral-5: #d9d9d9;
+    --neutral-9: #8c8c8c;
+    --neutral-11: #474747;
+    --neutral-12: #353535;
+    --neutral-a-2: rgba(0, 0, 0, 0.03);
+    --neutral-a-3: rgba(0, 0, 0, 0.06);
+    --neutral-a-4: rgba(0, 0, 0, 0.09);
+    --neutral-a-6: rgba(0, 0, 0, 0.16);
+    --neutral-a-9: rgba(0, 0, 0, 0.42);
+    --neutral-a-11: rgba(0, 0, 0, 0.72);
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 12px;
+    --radius-full: 9999px;
+    --shadow-sm: 0px 1px 2px 0px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0px 4px 6px -1px rgba(0, 0, 0, 0.1), 0px 2px 4px -2px rgba(0, 0, 0, 0.1);
+    --transition-fast: 150ms ease;
+    --transition-normal: 200ms ease;
+  }
+
   * {
     margin: 0;
     padding: 0;
@@ -11,44 +46,48 @@
   }
 
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    font-size: 12px;
-    color: #333;
-    background: #fff;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 13px;
+    color: var(--neutral-12);
+    background: var(--neutral-0);
     overflow-x: hidden;
+    line-height: 1.4;
   }
 
-  /* ─── Tabs ─── */
+  /* ─── Tabs (ContentSwitcher style) ─── */
   .tabs {
     display: flex;
-    border-bottom: 1px solid #e5e5e5;
+    background: var(--neutral-a-2);
     position: sticky;
     top: 0;
-    background: #fff;
     z-index: 10;
+    padding: 3px;
+    gap: 2px;
   }
 
   .tab {
     flex: 1;
-    padding: 10px 8px;
+    padding: 6px 8px;
     text-align: center;
     cursor: pointer;
     font-size: 12px;
     font-weight: 500;
-    color: #999;
-    border-bottom: 2px solid transparent;
-    transition: all 0.15s;
+    color: var(--neutral-9);
+    border: none;
+    border-radius: var(--radius-lg);
+    transition: all var(--transition-fast);
     user-select: none;
+    background: transparent;
   }
 
   .tab:hover {
-    color: #666;
-    background: #fafafa;
+    color: var(--neutral-11);
   }
 
   .tab.active {
-    color: #333;
-    border-bottom-color: #4e8ef7;
+    color: var(--neutral-12);
+    background: var(--neutral-0);
+    box-shadow: var(--shadow-sm);
   }
 
   /* ─── Content ─── */
@@ -68,23 +107,23 @@
     align-items: center;
     justify-content: center;
     padding: 48px 24px;
-    color: #aaa;
+    color: var(--neutral-9);
     text-align: center;
   }
 
   .empty-state svg {
     margin-bottom: 12px;
-    opacity: 0.4;
+    opacity: 0.3;
   }
 
   .empty-state p {
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1.5;
   }
 
   /* ─── Component Group ─── */
   .component-group {
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--neutral-3);
   }
 
   .component-header {
@@ -92,31 +131,32 @@
     align-items: center;
     justify-content: space-between;
     padding: 8px 12px;
-    background: #fafafa;
+    background: var(--neutral-1);
     cursor: pointer;
     user-select: none;
+    transition: background var(--transition-fast);
   }
 
   .component-header:hover {
-    background: #f5f5f5;
+    background: var(--neutral-2);
   }
 
   .component-name {
     font-weight: 600;
-    font-size: 12px;
-    color: #333;
+    font-size: 13px;
+    color: var(--neutral-12);
     display: flex;
     align-items: center;
     gap: 6px;
   }
 
   .component-count {
-    font-size: 10px;
-    color: #999;
-    background: #eee;
-    padding: 1px 6px;
-    border-radius: 8px;
-    font-weight: 400;
+    font-size: 11px;
+    color: var(--neutral-9);
+    background: var(--neutral-a-3);
+    padding: 1px 7px;
+    border-radius: var(--radius-full);
+    font-weight: 500;
   }
 
   .component-actions {
@@ -130,48 +170,52 @@
     border: none;
     background: transparent;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #999;
+    color: var(--neutral-9);
+    transition: all var(--transition-fast);
   }
 
   .btn-icon:hover {
-    background: #e5e5e5;
-    color: #333;
+    background: var(--neutral-a-4);
+    color: var(--neutral-12);
   }
 
   /* ─── Instance row ─── */
   .instance-row {
-    padding: 6px 12px 6px calc(12px + var(--depth, 0) * 16px);
-    border-bottom: 1px solid #f8f8f8;
+    padding: 8px 12px 8px calc(12px + var(--depth, 0) * 16px);
+    border-bottom: 1px solid var(--neutral-a-2);
     cursor: pointer;
+    transition: background var(--transition-fast);
   }
 
   .instance-row:hover {
-    background: #f5f8ff;
+    background: var(--brand-a-3);
   }
 
   .instance-name {
-    font-size: 11px;
-    color: #666;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--neutral-11);
     margin-bottom: 4px;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
   }
 
   .instance-name .icon {
-    width: 12px;
-    height: 12px;
-    color: #b36be8;
+    width: 14px;
+    height: 14px;
+    color: var(--brand-9);
+    flex-shrink: 0;
   }
 
   .instance-path {
-    font-size: 10px;
-    color: #bbb;
-    margin-bottom: 6px;
+    font-size: 11px;
+    color: var(--neutral-9);
+    margin-bottom: 8px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -181,19 +225,20 @@
   .properties {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
   }
 
   .property-row {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
   }
 
   .property-label {
-    font-size: 10px;
-    color: #888;
-    min-width: 70px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--neutral-a-11);
+    min-width: 80px;
     flex-shrink: 0;
     text-overflow: ellipsis;
     overflow: hidden;
@@ -208,19 +253,26 @@
   .property-control select,
   .property-control input[type="text"] {
     width: 100%;
-    padding: 3px 6px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 11px;
+    padding: 4px 8px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-lg);
+    font-size: 12px;
     font-family: inherit;
-    color: #333;
-    background: #fff;
+    color: var(--neutral-12);
+    background: var(--neutral-a-2);
     outline: none;
+    transition: all var(--transition-fast);
+  }
+
+  .property-control select:hover,
+  .property-control input[type="text"]:hover {
+    border-color: var(--neutral-9);
   }
 
   .property-control select:focus,
   .property-control input[type="text"]:focus {
-    border-color: #4e8ef7;
+    background: var(--neutral-0);
+    border-color: var(--brand-9);
   }
 
   .property-control select {
@@ -228,13 +280,13 @@
     appearance: auto;
   }
 
-  /* Toggle switch for booleans */
+  /* ─── Toggle/Switch (fast.ui.kit Switcher: 24x14 small) ─── */
   .toggle {
     display: inline-flex;
     align-items: center;
-    width: 32px;
-    min-width: 32px;
-    height: 18px;
+    width: 24px;
+    min-width: 24px;
+    height: 14px;
     cursor: pointer;
     position: relative;
     flex-shrink: 0;
@@ -250,11 +302,11 @@
 
   .toggle-slider {
     display: block;
-    width: 32px;
-    height: 18px;
-    background: #ccc;
-    border-radius: 9px;
-    transition: background 0.2s;
+    width: 24px;
+    height: 14px;
+    background: var(--neutral-a-3);
+    border-radius: var(--radius-full);
+    transition: background var(--transition-fast);
     position: relative;
     flex-shrink: 0;
   }
@@ -262,34 +314,35 @@
   .toggle-slider::before {
     content: "";
     position: absolute;
-    height: 14px;
-    width: 14px;
+    height: 10px;
+    width: 10px;
     left: 2px;
     top: 2px;
-    background: white;
+    background: var(--neutral-0);
     border-radius: 50%;
-    transition: transform 0.2s;
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--transition-fast);
   }
 
   .toggle input:checked + .toggle-slider {
-    background: #4e8ef7;
+    background: var(--brand-9);
   }
 
   .toggle input:checked + .toggle-slider::before {
-    transform: translateX(14px);
+    transform: translateX(10px);
   }
 
   /* ─── Bulk section ─── */
   .bulk-section {
     padding: 8px 12px;
-    background: #f9fbff;
-    border-top: 1px solid #e8eef8;
+    background: var(--brand-a-3);
+    border-top: 1px solid var(--brand-3);
   }
 
   .bulk-title {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
-    color: #4e8ef7;
+    color: var(--brand-11);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: 6px;
@@ -302,8 +355,8 @@
     height: 0;
     border-left: 4px solid transparent;
     border-right: 4px solid transparent;
-    border-top: 5px solid #999;
-    transition: transform 0.15s;
+    border-top: 5px solid var(--neutral-9);
+    transition: transform var(--transition-fast);
     margin-right: 4px;
   }
 
@@ -313,7 +366,6 @@
 
   .component-body {
     overflow: hidden;
-    transition: max-height 0.2s;
   }
 
   .collapsed .component-body {
@@ -322,15 +374,16 @@
 
   /* ─── Summary bar ─── */
   .summary-bar {
-    padding: 6px 12px;
-    font-size: 11px;
-    color: #888;
-    background: #fafafa;
-    border-bottom: 1px solid #eee;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--neutral-9);
+    background: var(--neutral-1);
+    border-bottom: 1px solid var(--neutral-3);
   }
 
   .summary-bar strong {
-    color: #333;
+    color: var(--neutral-12);
+    font-weight: 600;
   }
 </style>
 </head>
