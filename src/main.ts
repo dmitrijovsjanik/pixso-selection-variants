@@ -1082,33 +1082,46 @@ pixso.ui.on("message", (msg: any) => {
       }
     }
 
+    console.log("[Swap Picker] Resolving", keys.length, "preferred value keys for", propertyName);
+
     if (keys.length === 0) {
       pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [] });
       return;
     }
 
-    Promise.all(
-      keys.map(async (key) => {
-        try {
-          const comp = await pixso.importComponentByKeyAsync(key);
-          // Try to get thumbnail
-          let thumbnailDataUrl = "";
-          try {
-            const bytes = await comp.exportAsync({
-              format: "PNG",
-              constraint: { type: "HEIGHT", value: 32 },
-            } as ExportSettingsImage);
-            thumbnailDataUrl = `data:image/png;base64,${pixso.base64Encode(bytes)}`;
-          } catch {}
-          return { id: comp.id, name: comp.name, thumbnailDataUrl };
-        } catch {
-          return null;
-        }
-      })
-    ).then((resolved) => {
-      const values = resolved.filter((r): r is NonNullable<typeof r> => r !== null);
-      pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values });
-    });
+    // Resolve each key with a timeout to avoid hanging
+    const withTimeout = (promise: Promise<any>, ms: number) =>
+      Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject("timeout"), ms))]);
+
+    // Send values incrementally — don't wait for all to resolve
+    const values: { id: string; name: string; thumbnailDataUrl: string }[] = [];
+    let resolved = 0;
+
+    for (const key of keys) {
+      withTimeout(pixso.importComponentByKeyAsync(key), 5000)
+        .then((comp: any) => {
+          values.push({ id: comp.id, name: comp.name, thumbnailDataUrl: "" });
+          resolved++;
+          console.log("[Swap Picker] Resolved", resolved, "/", keys.length, comp.name);
+          // Send partial results
+          pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [...values] });
+        })
+        .catch((err: any) => {
+          resolved++;
+          console.warn("[Swap Picker] Failed to resolve key:", key, err);
+          if (resolved === keys.length && values.length === 0) {
+            pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [] });
+          }
+        });
+    }
+
+    // Fallback: if nothing resolves in 8 seconds, send empty
+    setTimeout(() => {
+      if (resolved < keys.length) {
+        console.warn("[Swap Picker] Timeout, sending partial results:", values.length, "of", keys.length);
+        pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [...values] });
+      }
+    }, 8000);
   }
 
   if (msg.type === "refresh") {
