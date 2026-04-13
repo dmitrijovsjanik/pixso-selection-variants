@@ -281,43 +281,25 @@ console.log("[Selection Variants] Plugin starting...");
 pixso.showUI(__html__, { width: 360, height: 520 });
 console.log("[Selection Variants] UI shown");
 
-// ─── Parent instance chain for "go up" navigation ───
-
-interface ParentInstanceInfo {
-  id: string;
-  name: string;
-}
-
-// Walk up the node tree from the current selection, collecting parent instances
-function getParentInstanceChain(): ParentInstanceInfo[] {
+// Check if current selection has a parent (can go up)
+function getParentInfo(): { id: string; name: string } | null {
   const sel = pixso.currentPage.selection;
-  if (!sel || sel.length === 0) return [];
+  if (!sel || sel.length === 0) return null;
 
-  // Use the first selected node to walk up
-  let current: BaseNode | null = sel[0].parent;
-  const chain: ParentInstanceInfo[] = [];
+  const parent = sel[0].parent;
+  if (!parent || parent.type === "PAGE" || parent.type === "DOCUMENT") return null;
 
-  while (current && current.type !== "PAGE" && current.type !== "DOCUMENT") {
-    if (current.type === "INSTANCE") {
-      chain.push({
-        id: current.id,
-        name: (current as InstanceNode).name,
-      });
-    }
-    current = current.parent;
-  }
-
-  return chain; // nearest parent first, root last
+  return { id: parent.id, name: parent.name };
 }
 
 // Send initial data
 function sendSelectionData() {
   const data = analyzeSelection();
-  const parentChain = getParentInstanceChain();
+  const parentInfo = getParentInfo();
   pixso.ui.postMessage({
     type: "selection-data",
     data,
-    parentChain,
+    parentInfo,
   });
 }
 
@@ -421,12 +403,14 @@ pixso.ui.on("message", (msg: any) => {
     }
   }
 
-  if (msg.type === "select-parent-instance") {
-    // Navigate up to a parent instance by id
-    const { nodeId } = msg;
-    const node = pixso.getNodeById(nodeId);
-    if (node && "type" in node) {
-      pixso.currentPage.selection = [node as SceneNode];
+  if (msg.type === "go-up") {
+    // Select the parent of the current selection (like Shift+Enter)
+    const sel = pixso.currentPage.selection;
+    if (sel && sel.length > 0) {
+      const parent = sel[0].parent;
+      if (parent && parent.type !== "PAGE" && parent.type !== "DOCUMENT" && "type" in parent) {
+        pixso.currentPage.selection = [parent as SceneNode];
+      }
     }
   }
 

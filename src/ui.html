@@ -508,59 +508,48 @@
     font-weight: 600;
   }
 
-  /* ─── Parent chain navigation ─── */
-  .parent-chain {
-    border-bottom: 1px solid var(--neutral-3);
-    position: sticky;
-    top: 34px;
-    z-index: 6;
-    background: var(--neutral-0);
-  }
-
-  .parent-item {
+  /* ─── Go up bar ─── */
+  .go-up-bar {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 12px;
+    padding: 7px 12px;
+    background: var(--neutral-0);
+    border-bottom: 1px solid var(--neutral-3);
     cursor: pointer;
     transition: background var(--transition-fast);
-    border-bottom: 1px solid var(--neutral-a-2);
+    position: sticky;
+    top: 34px;
+    z-index: 6;
   }
 
-  .parent-item:last-child {
-    border-bottom: none;
+  .go-up-bar:hover {
+    background: var(--neutral-2);
   }
 
-  .parent-item:hover {
-    background: var(--brand-a-3);
-  }
-
-  .parent-item-icon {
+  .go-up-icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: 20px;
+    height: 20px;
+    background: var(--neutral-a-3);
+    border-radius: var(--radius-sm);
+    color: var(--neutral-11);
     flex-shrink: 0;
-    color: var(--neutral-9);
   }
 
-  .parent-item-name {
+  .go-up-bar:hover .go-up-icon {
+    background: var(--neutral-a-4);
+  }
+
+  .go-up-label {
     font-size: 12px;
     font-weight: 500;
     color: var(--neutral-11);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    flex: 1;
-  }
-
-  .parent-item:hover .parent-item-name {
-    color: var(--brand-9);
-  }
-
-  .parent-item-badge {
-    font-size: 10px;
-    color: var(--neutral-9);
-    flex-shrink: 0;
   }
 </style>
 </head>
@@ -578,7 +567,7 @@
   // ─── State ───
   let currentData = null;
   let detailViewComponent = null; // null = bulk list, string = component name for detail view
-  let parentChain = [];  // [{id, name}] — nearest parent first
+  let parentInfo = null;  // {id, name} or null
 
   // ─── Tab switching ───
   document.querySelectorAll('.tab').forEach(tab => {
@@ -633,28 +622,15 @@
     return { on: prop.options.find(o => o.toLowerCase() === 'yes'), off: prop.options.find(o => o.toLowerCase() === 'no') };
   }
 
-  // ─── Render parent instance chain (go-up navigation) ───
-  function renderParentChain() {
-    if (parentChain.length === 0) return '';
-
-    let html = `<div class="parent-chain">`;
-
-    // Show parents in reverse order: root at top, nearest parent at bottom
-    const reversed = [...parentChain].reverse();
-    for (let i = 0; i < reversed.length; i++) {
-      const parent = reversed[i];
-      const depth = i;
-      html += `<div class="parent-item" data-select-parent="${escAttr(parent.id)}" style="padding-left: ${12 + depth * 12}px">
-        <span class="parent-item-icon">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
-        </span>
-        <span class="parent-item-name">${escHtml(parent.name)}</span>
-        <span class="parent-item-badge">parent</span>
-      </div>`;
-    }
-
-    html += `</div>`;
-    return html;
+  // ─── Render "go up" bar ───
+  function renderGoUpBar() {
+    if (!parentInfo) return '';
+    return `<div class="go-up-bar" data-go-up>
+      <span class="go-up-icon">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 15l-6-6-6 6"/></svg>
+      </span>
+      <span class="go-up-label">${escHtml(parentInfo.name)}</span>
+    </div>`;
   }
 
   // ─── Render a property control ───
@@ -813,7 +789,7 @@
     }
 
     // ─── Bulk list view (main) ───
-    let html = renderParentChain();
+    let html = renderGoUpBar();
     html += `<div class="summary-bar"><strong>${data.instances.length}</strong> instance${data.instances.length > 1 ? 's' : ''} from <strong>${names.length}</strong> component${names.length > 1 ? 's' : ''}</div>`;
 
     for (const compName of names) {
@@ -941,7 +917,7 @@
       return;
     }
 
-    let html = renderParentChain();
+    let html = renderGoUpBar();
     html += `<div class="summary-bar"><strong>${data.instances.length}</strong> instance${data.instances.length > 1 ? 's' : ''} from <strong>${names.length}</strong> component${names.length > 1 ? 's' : ''}</div>`;
 
     for (const compName of names) {
@@ -993,11 +969,11 @@
       });
     });
 
-    // Navigate up to parent instance
-    document.querySelectorAll('[data-select-parent]').forEach(el => {
+    // Go up one level
+    document.querySelectorAll('[data-go-up]').forEach(el => {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
-        postMsg({ type: 'select-parent-instance', nodeId: el.dataset.selectParent });
+        postMsg({ type: 'go-up' });
       });
     });
 
@@ -1104,7 +1080,7 @@
 
     if (msg.type === 'selection-data') {
       currentData = msg.data;
-      parentChain = msg.parentChain || [];
+      parentInfo = msg.parentInfo || null;
       renderVariantsTab(currentData);
       renderInstancesTab(currentData);
     }
