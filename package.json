@@ -1,0 +1,14 @@
+{
+  "name": "selection-variants",
+  "version": "1.0.0",
+  "description": "View and control all nested variants, component properties, and instances in selection",
+  "scripts": {
+    "dev": "pixso-plugin-cli dev",
+    "build": "pixso-plugin-cli build"
+  },
+  "devDependencies": {
+    "@pixso/plugin-typings": "latest",
+    "@pixso/plugin-cli": "latest",
+    "typescript": "^5.0.0"
+  }
+}

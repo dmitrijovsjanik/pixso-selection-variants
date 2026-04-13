@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 12px;
+    color: #333;
+    background: #fff;
+    overflow-x: hidden;
+  }
+
+  /* ─── Tabs ─── */
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid #e5e5e5;
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 10;
+  }
+
+  .tab {
+    flex: 1;
+    padding: 10px 8px;
+    text-align: center;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    color: #999;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    user-select: none;
+  }
+
+  .tab:hover {
+    color: #666;
+    background: #fafafa;
+  }
+
+  .tab.active {
+    color: #333;
+    border-bottom-color: #4e8ef7;
+  }
+
+  /* ─── Content ─── */
+  .tab-content {
+    display: none;
+    padding: 0;
+  }
+
+  .tab-content.active {
+    display: block;
+  }
+
+  /* ─── Empty state ─── */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 24px;
+    color: #aaa;
+    text-align: center;
+  }
+
+  .empty-state svg {
+    margin-bottom: 12px;
+    opacity: 0.4;
+  }
+
+  .empty-state p {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  /* ─── Component Group ─── */
+  .component-group {
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .component-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: #fafafa;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .component-header:hover {
+    background: #f5f5f5;
+  }
+
+  .component-name {
+    font-weight: 600;
+    font-size: 12px;
+    color: #333;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .component-count {
+    font-size: 10px;
+    color: #999;
+    background: #eee;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-weight: 400;
+  }
+
+  .component-actions {
+    display: flex;
+    gap: 4px;
+  }
+
+  .btn-icon {
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #999;
+  }
+
+  .btn-icon:hover {
+    background: #e5e5e5;
+    color: #333;
+  }
+
+  /* ─── Instance row ─── */
+  .instance-row {
+    padding: 6px 12px 6px calc(12px + var(--depth, 0) * 16px);
+    border-bottom: 1px solid #f8f8f8;
+    cursor: pointer;
+  }
+
+  .instance-row:hover {
+    background: #f5f8ff;
+  }
+
+  .instance-name {
+    font-size: 11px;
+    color: #666;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .instance-name .icon {
+    width: 12px;
+    height: 12px;
+    color: #b36be8;
+  }
+
+  .instance-path {
+    font-size: 10px;
+    color: #bbb;
+    margin-bottom: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ─── Properties ─── */
+  .properties {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .property-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .property-label {
+    font-size: 10px;
+    color: #888;
+    min-width: 70px;
+    flex-shrink: 0;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .property-control {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .property-control select,
+  .property-control input[type="text"] {
+    width: 100%;
+    padding: 3px 6px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: inherit;
+    color: #333;
+    background: #fff;
+    outline: none;
+  }
+
+  .property-control select:focus,
+  .property-control input[type="text"]:focus {
+    border-color: #4e8ef7;
+  }
+
+  .property-control select {
+    cursor: pointer;
+    appearance: auto;
+  }
+
+  /* Toggle switch for booleans */
+  .toggle {
+    position: relative;
+    width: 32px;
+    height: 18px;
+    cursor: pointer;
+  }
+
+  .toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+  }
+
+  .toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: #ccc;
+    border-radius: 9px;
+    transition: 0.2s;
+  }
+
+  .toggle-slider::before {
+    content: "";
+    position: absolute;
+    height: 14px;
+    width: 14px;
+    left: 2px;
+    bottom: 2px;
+    background: white;
+    border-radius: 50%;
+    transition: 0.2s;
+  }
+
+  .toggle input:checked + .toggle-slider {
+    background: #4e8ef7;
+  }
+
+  .toggle input:checked + .toggle-slider::before {
+    transform: translateX(14px);
+  }
+
+  /* ─── Bulk section ─── */
+  .bulk-section {
+    padding: 8px 12px;
+    background: #f9fbff;
+    border-top: 1px solid #e8eef8;
+  }
+
+  .bulk-title {
+    font-size: 10px;
+    font-weight: 600;
+    color: #4e8ef7;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+
+  /* ─── Collapse arrow ─── */
+  .collapse-arrow {
+    display: inline-block;
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid #999;
+    transition: transform 0.15s;
+    margin-right: 4px;
+  }
+
+  .collapsed .collapse-arrow {
+    transform: rotate(-90deg);
+  }
+
+  .component-body {
+    overflow: hidden;
+    transition: max-height 0.2s;
+  }
+
+  .collapsed .component-body {
+    display: none;
+  }
+
+  /* ─── Summary bar ─── */
+  .summary-bar {
+    padding: 6px 12px;
+    font-size: 11px;
+    color: #888;
+    background: #fafafa;
+    border-bottom: 1px solid #eee;
+  }
+
+  .summary-bar strong {
+    color: #333;
+  }
+</style>
+</head>
+<body>
+
+<div class="tabs">
+  <div class="tab active" data-tab="variants">Variants</div>
+  <div class="tab" data-tab="instances">Instances</div>
+</div>
+
+<div id="variants-tab" class="tab-content active"></div>
+<div id="instances-tab" class="tab-content"></div>
+
+<script>
+  // ─── State ───
+  let currentData = null;
+
+  // ─── Tab switching ───
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.tab + '-tab').classList.add('active');
+    });
+  });
+
+  // ─── Post message to sandbox ───
+  function postMsg(msg) {
+    parent.postMessage({ pluginMessage: msg }, '*');
+  }
+
+  // ─── Render empty state ───
+  function renderEmpty(message) {
+    return `
+      <div class="empty-state">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <path d="M9 9l6 6M15 9l-6 6"/>
+        </svg>
+        <p>${message}</p>
+      </div>`;
+  }
+
+  // ─── Clean property name (remove unique suffix like #123:456) ───
+  function cleanPropName(name) {
+    return name.replace(/#\d+:\d+$/, '').trim();
+  }
+
+  // ─── Render a property control ───
+  function renderPropertyControl(prop, instanceId, isBulk, componentName) {
+    const clean = cleanPropName(prop.name);
+
+    if (prop.type === 'VARIANT' && prop.options && prop.options.length > 0) {
+      const options = prop.options.map(opt =>
+        `<option value="${escHtml(opt)}" ${opt === prop.currentValue ? 'selected' : ''}>${escHtml(opt)}</option>`
+      ).join('');
+
+      const evtType = isBulk ? 'bulk-set-variant' : 'set-variant';
+      const dataAttr = isBulk
+        ? `data-component="${escAttr(componentName)}" data-prop="${escAttr(prop.name)}"`
+        : `data-instance="${escAttr(instanceId)}" data-prop="${escAttr(prop.name)}"`;
+
+      return `
+        <div class="property-row">
+          <span class="property-label" title="${escAttr(prop.name)}">${escHtml(clean)}</span>
+          <div class="property-control">
+            <select class="prop-select" data-type="${evtType}" ${dataAttr}>
+              ${options}
+            </select>
+          </div>
+        </div>`;
+    }
+
+    if (prop.type === 'BOOLEAN') {
+      const checked = prop.currentValue === true || prop.currentValue === 'true';
+      const evtType = isBulk ? 'bulk-set-component-property' : 'set-component-property';
+      const dataAttr = isBulk
+        ? `data-component="${escAttr(componentName)}" data-prop="${escAttr(prop.name)}"`
+        : `data-instance="${escAttr(instanceId)}" data-prop="${escAttr(prop.name)}"`;
+
+      return `
+        <div class="property-row">
+          <span class="property-label" title="${escAttr(prop.name)}">${escHtml(clean)}</span>
+          <div class="property-control">
+            <label class="toggle">
+              <input type="checkbox" class="prop-toggle" data-type="${evtType}" ${dataAttr} ${checked ? 'checked' : ''} />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>`;
+    }
+
+    if (prop.type === 'TEXT') {
+      const evtType = isBulk ? 'bulk-set-component-property' : 'set-component-property';
+      const dataAttr = isBulk
+        ? `data-component="${escAttr(componentName)}" data-prop="${escAttr(prop.name)}"`
+        : `data-instance="${escAttr(instanceId)}" data-prop="${escAttr(prop.name)}"`;
+
+      return `
+        <div class="property-row">
+          <span class="property-label" title="${escAttr(prop.name)}">${escHtml(clean)}</span>
+          <div class="property-control">
+            <input type="text" class="prop-text" data-type="${evtType}" ${dataAttr}
+              value="${escAttr(String(prop.currentValue))}" />
+          </div>
+        </div>`;
+    }
+
+    return '';
+  }
+
+  // ─── Get merged properties for a group of instances (for bulk view) ───
+  function getMergedProperties(instances) {
+    // Merge variant properties
+    const variantMap = {};
+    const compPropMap = {};
+
+    for (const inst of instances) {
+      for (const vp of inst.variantProperties) {
+        if (!variantMap[vp.name]) {
+          variantMap[vp.name] = { ...vp, values: new Set() };
+        }
+        variantMap[vp.name].values.add(vp.currentValue);
+        // Merge options
+        for (const o of vp.options) variantMap[vp.name].options = vp.options;
+      }
+
+      for (const cp of inst.componentProperties) {
+        if (!compPropMap[cp.name]) {
+          compPropMap[cp.name] = { ...cp, values: new Set() };
+        }
+        compPropMap[cp.name].values.add(String(cp.currentValue));
+      }
+    }
+
+    const variants = Object.values(variantMap).map(v => ({
+      name: v.name,
+      type: 'VARIANT',
+      currentValue: v.values.size === 1 ? [...v.values][0] : '(mixed)',
+      options: v.options || [],
+    }));
+
+    const compProps = Object.values(compPropMap).map(v => ({
+      name: v.name,
+      type: v.type,
+      currentValue: v.values.size === 1 ? v.currentValue : '(mixed)',
+      options: v.options,
+    }));
+
+    return { variants, compProps };
+  }
+
+  // ─── Render Variants tab ───
+  function renderVariantsTab(data) {
+    const container = document.getElementById('variants-tab');
+    if (!data.hasSelection) {
+      container.innerHTML = renderEmpty('Select an object to see<br/>variant properties');
+      return;
+    }
+
+    const groups = data.groupedByComponent;
+    const names = Object.keys(groups);
+
+    if (names.length === 0) {
+      container.innerHTML = renderEmpty('No instances found<br/>in selection');
+      return;
+    }
+
+    let html = `<div class="summary-bar"><strong>${data.instances.length}</strong> instance${data.instances.length > 1 ? 's' : ''} from <strong>${names.length}</strong> component${names.length > 1 ? 's' : ''}</div>`;
+
+    for (const compName of names) {
+      const instances = groups[compName];
+      const hasVariants = instances.some(i => i.variantProperties.length > 0);
+      const hasCompProps = instances.some(i => i.componentProperties.length > 0);
+
+      if (!hasVariants && !hasCompProps) continue;
+
+      const merged = getMergedProperties(instances);
+
+      html += `<div class="component-group">`;
+      html += `<div class="component-header" data-toggle>
+        <span class="component-name">
+          <span class="collapse-arrow"></span>
+          ${escHtml(compName)}
+          <span class="component-count">${instances.length}</span>
+        </span>
+        <div class="component-actions">
+          <button class="btn-icon" title="Select all instances" data-select-component="${escAttr(compName)}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          </button>
+        </div>
+      </div>`;
+
+      html += `<div class="component-body">`;
+
+      // Bulk controls
+      if (instances.length > 1 && (merged.variants.length > 0 || merged.compProps.length > 0)) {
+        html += `<div class="bulk-section">`;
+        html += `<div class="bulk-title">Bulk Edit (${instances.length})</div>`;
+        html += `<div class="properties">`;
+        for (const vp of merged.variants) {
+          html += renderPropertyControl(vp, null, true, compName);
+        }
+        for (const cp of merged.compProps) {
+          if (cp.type !== 'VARIANT') {
+            html += renderPropertyControl(cp, null, true, compName);
+          }
+        }
+        html += `</div></div>`;
+      }
+
+      // Individual instances
+      for (const inst of instances) {
+        if (inst.variantProperties.length === 0 && inst.componentProperties.length === 0) continue;
+
+        html += `<div class="instance-row" style="--depth: ${inst.depth}" data-click-instance="${escAttr(inst.id)}">`;
+        html += `<div class="instance-name">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+          </svg>
+          ${escHtml(inst.name)}
+        </div>`;
+        if (inst.path) html += `<div class="instance-path" title="${escAttr(inst.path)}">${escHtml(inst.path)}</div>`;
+
+        html += `<div class="properties" onclick="event.stopPropagation()">`;
+        for (const vp of inst.variantProperties) {
+          html += renderPropertyControl({
+            name: vp.name,
+            type: 'VARIANT',
+            currentValue: vp.currentValue,
+            options: vp.options,
+          }, inst.id, false, null);
+        }
+        for (const cp of inst.componentProperties) {
+          if (cp.type !== 'VARIANT') {
+            html += renderPropertyControl(cp, inst.id, false, null);
+          }
+        }
+        html += `</div></div>`;
+      }
+
+      html += `</div></div>`;
+    }
+
+    container.innerHTML = html;
+    attachEventListeners();
+  }
+
+  // ─── Render Instances tab ───
+  function renderInstancesTab(data) {
+    const container = document.getElementById('instances-tab');
+    if (!data.hasSelection) {
+      container.innerHTML = renderEmpty('Select an object to see<br/>nested instances');
+      return;
+    }
+
+    const groups = data.groupedByComponent;
+    const names = Object.keys(groups);
+
+    if (names.length === 0) {
+      container.innerHTML = renderEmpty('No instances found<br/>in selection');
+      return;
+    }
+
+    let html = `<div class="summary-bar"><strong>${data.instances.length}</strong> instance${data.instances.length > 1 ? 's' : ''} from <strong>${names.length}</strong> component${names.length > 1 ? 's' : ''}</div>`;
+
+    for (const compName of names) {
+      const instances = groups[compName];
+
+      html += `<div class="component-group">`;
+      html += `<div class="component-header" data-toggle>
+        <span class="component-name">
+          <span class="collapse-arrow"></span>
+          ${escHtml(compName)}
+          <span class="component-count">${instances.length}</span>
+        </span>
+        <div class="component-actions">
+          <button class="btn-icon" title="Select all" data-select-component="${escAttr(compName)}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          </button>
+        </div>
+      </div>`;
+
+      html += `<div class="component-body">`;
+      for (const inst of instances) {
+        html += `<div class="instance-row" style="--depth: ${inst.depth}" data-click-instance="${escAttr(inst.id)}">`;
+        html += `<div class="instance-name">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+          </svg>
+          ${escHtml(inst.name)}
+          ${inst.depth > 0 ? `<span style="color:#bbb;font-size:10px">depth ${inst.depth}</span>` : ''}
+        </div>`;
+        if (inst.path) {
+          html += `<div class="instance-path" title="${escAttr(inst.path)}">${escHtml(inst.path)}</div>`;
+        }
+        html += `</div>`;
+      }
+      html += `</div></div>`;
+    }
+
+    container.innerHTML = html;
+    attachEventListeners();
+  }
+
+  // ─── Attach event listeners ───
+  function attachEventListeners() {
+    // Collapse/expand
+    document.querySelectorAll('[data-toggle]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-icon') || e.target.closest('.component-actions')) return;
+        el.closest('.component-group').classList.toggle('collapsed');
+      });
+    });
+
+    // Select component instances
+    document.querySelectorAll('[data-select-component]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        postMsg({ type: 'select-instances-by-component', componentName: el.dataset.selectComponent });
+      });
+    });
+
+    // Click instance to select
+    document.querySelectorAll('[data-click-instance]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('.properties') || e.target.closest('select') ||
+            e.target.closest('input') || e.target.closest('.toggle')) return;
+        postMsg({ type: 'select-instance', instanceId: el.dataset.clickInstance });
+      });
+    });
+
+    // Variant selects
+    document.querySelectorAll('.prop-select').forEach(el => {
+      el.addEventListener('change', () => {
+        const msg = { type: el.dataset.type, propertyName: el.dataset.prop, newValue: el.value };
+        if (el.dataset.instance) msg.instanceId = el.dataset.instance;
+        if (el.dataset.component) msg.componentName = el.dataset.component;
+        postMsg(msg);
+      });
+    });
+
+    // Boolean toggles
+    document.querySelectorAll('.prop-toggle').forEach(el => {
+      el.addEventListener('change', () => {
+        const msg = { type: el.dataset.type, propertyName: el.dataset.prop, newValue: el.checked };
+        if (el.dataset.instance) msg.instanceId = el.dataset.instance;
+        if (el.dataset.component) msg.componentName = el.dataset.component;
+        postMsg(msg);
+      });
+    });
+
+    // Text inputs (on blur / enter)
+    document.querySelectorAll('.prop-text').forEach(el => {
+      const send = () => {
+        const msg = { type: el.dataset.type, propertyName: el.dataset.prop, newValue: el.value };
+        if (el.dataset.instance) msg.instanceId = el.dataset.instance;
+        if (el.dataset.component) msg.componentName = el.dataset.component;
+        postMsg(msg);
+      };
+      el.addEventListener('blur', send);
+      el.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+    });
+  }
+
+  // ─── HTML escaping ───
+  function escHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = String(str);
+    return d.innerHTML;
+  }
+
+  function escAttr(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // ─── Message from sandbox ───
+  window.onmessage = (event) => {
+    const msg = event.data.pluginMessage;
+    if (!msg) return;
+
+    if (msg.type === 'selection-data') {
+      currentData = msg.data;
+      renderVariantsTab(currentData);
+      renderInstancesTab(currentData);
+    }
+  };
+</script>
+</body>
+</html>
