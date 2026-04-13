@@ -1049,79 +1049,68 @@ pixso.ui.on("message", (msg: any) => {
 
   if (msg.type === "get-preferred-swap-values") {
     const { propertyName } = msg;
+    const values: { id: string; name: string; thumbnailDataUrl: string }[] = [];
 
-    // Get preferred values directly from the component definition
-    let keys: string[] = [];
+    // Strategy 1: Find the current swap value node and get siblings from its ComponentSet
     const sel = pixso.currentPage.selection;
     if (sel && sel.length > 0) {
-      // Find first instance and get definitions
       const stack: SceneNode[] = [...sel];
-      while (stack.length > 0 && keys.length === 0) {
+      let found = false;
+
+      while (stack.length > 0 && !found) {
         const node = stack.pop()!;
         if (isInstanceNode(node)) {
-          const mc = node.mainComponent;
-          if (mc) {
-            let defs: ComponentPropertyDefinitions | null = null;
-            const p = mc.parent;
-            if (p && p.type === "COMPONENT_SET") {
-              defs = (p as ComponentSetNode).componentPropertyDefinitions;
-            } else {
-              defs = mc.componentPropertyDefinitions;
+          const compProps = node.componentProperties;
+          if (compProps && compProps[propertyName] && compProps[propertyName].type === "INSTANCE_SWAP") {
+            const currentValueId = compProps[propertyName].value as string;
+            const currentNode = pixso.getNodeById(currentValueId);
+
+            if (currentNode && currentNode.parent && currentNode.parent.type === "COMPONENT_SET") {
+              // Get all siblings from the same ComponentSet
+              const componentSet = currentNode.parent as ComponentSetNode;
+              for (const child of componentSet.children) {
+                if (isComponentNode(child)) {
+                  values.push({ id: child.id, name: child.name, thumbnailDataUrl: "" });
+                }
+              }
+              found = true;
             }
-            if (defs && defs[propertyName]) {
-              const def = defs[propertyName];
-              if (def.preferredValues) {
-                keys = (def.preferredValues as any[]).map((pv: any) => pv.key);
+          }
+
+          // Also check children for nested instances
+          if (!found && hasChildren(node)) {
+            for (const c of node.children) {
+              if (isInstanceNode(c)) {
+                const cProps = c.componentProperties;
+                // Check if this child instance has componentPropertyReferences
+                // pointing to our property name (it controls the swap)
+                if (c.componentPropertyReferences) {
+                  const refs = c.componentPropertyReferences;
+                  if (refs.mainComponent === propertyName) {
+                    const mc = c.mainComponent;
+                    if (mc && mc.parent && mc.parent.type === "COMPONENT_SET") {
+                      const componentSet = mc.parent as ComponentSetNode;
+                      for (const sibling of componentSet.children) {
+                        if (isComponentNode(sibling)) {
+                          values.push({ id: sibling.id, name: sibling.name, thumbnailDataUrl: "" });
+                        }
+                      }
+                      found = true;
+                    }
+                  }
+                }
               }
             }
           }
         }
-        if (hasChildren(node)) {
+        if (!found && hasChildren(node)) {
           for (const c of node.children) stack.push(c);
         }
       }
     }
 
-    console.log("[Swap Picker] Resolving", keys.length, "preferred value keys for", propertyName);
-
-    if (keys.length === 0) {
-      pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [] });
-      return;
-    }
-
-    // Resolve each key with a timeout to avoid hanging
-    const withTimeout = (promise: Promise<any>, ms: number) =>
-      Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject("timeout"), ms))]);
-
-    // Send values incrementally — don't wait for all to resolve
-    const values: { id: string; name: string; thumbnailDataUrl: string }[] = [];
-    let resolved = 0;
-
-    for (const key of keys) {
-      withTimeout(pixso.importComponentByKeyAsync(key), 5000)
-        .then((comp: any) => {
-          values.push({ id: comp.id, name: comp.name, thumbnailDataUrl: "" });
-          resolved++;
-          console.log("[Swap Picker] Resolved", resolved, "/", keys.length, comp.name);
-          // Send partial results
-          pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [...values] });
-        })
-        .catch((err: any) => {
-          resolved++;
-          console.warn("[Swap Picker] Failed to resolve key:", key, err);
-          if (resolved === keys.length && values.length === 0) {
-            pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [] });
-          }
-        });
-    }
-
-    // Fallback: if nothing resolves in 8 seconds, send empty
-    setTimeout(() => {
-      if (resolved < keys.length) {
-        console.warn("[Swap Picker] Timeout, sending partial results:", values.length, "of", keys.length);
-        pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [...values] });
-      }
-    }, 8000);
+    console.log("[Swap Picker] Found", values.length, "quick swap options for", propertyName);
+    pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values });
   }
 
   if (msg.type === "refresh") {
