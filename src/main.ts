@@ -11,6 +11,11 @@ interface VariantProperty {
   options: string[];
 }
 
+interface SwapOption {
+  id: string;
+  name: string;
+}
+
 interface ComponentPropertyInfo {
   name: string;
   type: string; // "BOOLEAN" | "TEXT" | "INSTANCE_SWAP" | "VARIANT"
@@ -18,6 +23,7 @@ interface ComponentPropertyInfo {
   currentValueName?: string; // resolved name for INSTANCE_SWAP
   defaultValue?: string | boolean;
   preferredValues?: string[];
+  swapOptions?: SwapOption[]; // resolved preferred values for INSTANCE_SWAP
   options?: string[]; // for VARIANT type
 }
 
@@ -144,9 +150,14 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
       } else {
         info.currentValueName = String(propValue.value);
       }
-    }
 
-    if (def && "preferredValues" in def) {
+      // Collect preferred values keys for async resolution
+      if (def && "preferredValues" in def && (def as any).preferredValues) {
+        info.preferredValues = (def as any).preferredValues.map(
+          (pv: { type: string; key: string }) => pv.key
+        );
+      }
+    } else if (def && "preferredValues" in def) {
       info.preferredValues = (def as any).preferredValues;
     }
 
@@ -352,6 +363,64 @@ function getParentInfo(): { id: string; name: string } | null {
   return { id: parent.id, name: parent.name };
 }
 
+// Resolve INSTANCE_SWAP preferred values async, then send update to UI
+async function resolveSwapOptions(data: SelectionData) {
+  const keysToResolve = new Map<string, string>(); // key -> name (cache)
+
+  for (const inst of data.instances) {
+    for (const cp of inst.componentProperties) {
+      if (cp.type === "INSTANCE_SWAP" && cp.preferredValues && cp.preferredValues.length > 0) {
+        for (const key of cp.preferredValues) {
+          if (!keysToResolve.has(key)) {
+            keysToResolve.set(key, "");
+          }
+        }
+      }
+    }
+  }
+
+  if (keysToResolve.size === 0) return;
+
+  // Resolve all keys in parallel
+  const entries = Array.from(keysToResolve.keys());
+  const resolved = await Promise.all(
+    entries.map(async (key) => {
+      try {
+        const comp = await pixso.importComponentByKeyAsync(key);
+        return { key, id: comp.id, name: comp.name };
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  const keyMap = new Map<string, { id: string; name: string }>();
+  for (const r of resolved) {
+    if (r) keyMap.set(r.key, { id: r.id, name: r.name });
+  }
+
+  // Build swap options map: propertyName -> SwapOption[]
+  const swapOptionsMap: { [propName: string]: SwapOption[] } = {};
+  for (const inst of data.instances) {
+    for (const cp of inst.componentProperties) {
+      if (cp.type === "INSTANCE_SWAP" && cp.preferredValues && !swapOptionsMap[cp.name]) {
+        const options: SwapOption[] = [];
+        for (const key of cp.preferredValues) {
+          const info = keyMap.get(key);
+          if (info) options.push(info);
+        }
+        if (options.length > 0) {
+          swapOptionsMap[cp.name] = options;
+        }
+      }
+    }
+  }
+
+  if (Object.keys(swapOptionsMap).length > 0) {
+    pixso.ui.postMessage({ type: "swap-options", swapOptionsMap });
+  }
+}
+
 // Send data immediately (used after property changes — sync, no loading)
 function sendSelectionData() {
   const data = analyzeSelectionSync();
@@ -361,6 +430,7 @@ function sendSelectionData() {
     data,
     parentInfo,
   });
+  resolveSwapOptions(data);
 }
 
 // Send with loading + live progress (used on selection change)
@@ -374,6 +444,7 @@ function sendLoadingThenData() {
       data,
       parentInfo,
     });
+    resolveSwapOptions(data);
   });
 }
 

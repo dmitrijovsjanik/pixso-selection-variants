@@ -656,6 +656,7 @@
   let currentData = null;
   let detailViewComponent = null; // null = bulk list, string = component name for detail view
   let parentInfo = null;  // {id, name} or null
+  let swapOptionsMap = {}; // propName -> [{id, name}]
 
   // ─── Tab switching ───
   document.querySelectorAll('.tab').forEach(tab => {
@@ -799,6 +800,36 @@
 
     if (prop.type === 'INSTANCE_SWAP') {
       const displayName = prop.currentValueName || String(prop.currentValue);
+      const options = swapOptionsMap[prop.name];
+
+      if (options && options.length > 0) {
+        const evtType = isBulk ? 'bulk-set-component-property' : 'set-component-property';
+        const dataAttr = isBulk
+          ? `data-component="${escAttr(componentName)}" data-prop="${escAttr(prop.name)}"`
+          : `data-instance="${escAttr(instanceId)}" data-prop="${escAttr(prop.name)}"`;
+
+        const optionsHtml = options.map(opt =>
+          `<option value="${escAttr(opt.id)}" ${opt.id === String(prop.currentValue) ? 'selected' : ''}>${escHtml(opt.name)}</option>`
+        ).join('');
+
+        // If current value is not in options, add it
+        const currentInOptions = options.some(o => o.id === String(prop.currentValue));
+        const currentOption = !currentInOptions
+          ? `<option value="${escAttr(String(prop.currentValue))}" selected>${escHtml(displayName)}</option>`
+          : '';
+
+        return `
+          <div class="property-row">
+            <span class="property-label" title="${escAttr(prop.name)}">${escHtml(clean)}</span>
+            <div class="property-control">
+              <select class="prop-select" data-type="${evtType}" ${dataAttr}>
+                ${currentOption}${optionsHtml}
+              </select>
+            </div>
+          </div>`;
+      }
+
+      // No swap options resolved yet — show read-only with loading hint
       return `
         <div class="property-row">
           <span class="property-label" title="${escAttr(prop.name)}">${escHtml(clean)}</span>
@@ -1198,9 +1229,19 @@
     if (msg.type === 'selection-data') {
       currentData = msg.data;
       parentInfo = msg.parentInfo || null;
+      swapOptionsMap = {}; // reset, will be populated by swap-options message
       updateGoUpBar();
       renderVariantsTab(currentData);
       renderInstancesTab(currentData);
+    }
+
+    if (msg.type === 'swap-options') {
+      swapOptionsMap = msg.swapOptionsMap || {};
+      // Re-render to show dropdowns instead of read-only values
+      if (currentData) {
+        renderVariantsTab(currentData);
+        renderInstancesTab(currentData);
+      }
     }
   };
 </script>
