@@ -575,6 +575,29 @@
     color: var(--neutral-5);
   }
 
+  .swap-thumb-loading {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(90deg, var(--neutral-a-2) 25%, var(--neutral-3) 50%, var(--neutral-a-2) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  .swap-thumb[src=""] {
+    display: none;
+  }
+
+  .swap-thumb:not([src=""]) + .swap-thumb-loading {
+    display: none;
+  }
+
   .swap-comp-info {
     flex: 1;
     min-width: 0;
@@ -1804,11 +1827,18 @@
     let html = '';
     for (const comp of folder.components) {
       const isSet = comp.type === 'COMPONENT_SET';
-      const thumb = comp.thumbnailUrl
-        ? `<img class="swap-thumb" src="${comp.thumbnailUrl}" />`
-        : (comp.thumbnailDataUrl
-          ? `<img class="swap-thumb" src="${comp.thumbnailDataUrl}" />`
-          : `<div class="swap-thumb-placeholder">${compSvg}</div>`);
+      let thumb;
+      if (comp.thumbnailUrl) {
+        thumb = `<img class="swap-thumb" src="${escAttr(comp.thumbnailUrl)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div class="swap-thumb-placeholder" style="display:none">${compSvg}</div>`;
+      } else if (comp.thumbnailDataUrl) {
+        thumb = `<img class="swap-thumb" src="${comp.thumbnailDataUrl}" />`;
+      } else if (comp.id && thumbnailCache[comp.id]) {
+        thumb = `<img class="swap-thumb" src="${thumbnailCache[comp.id]}" />`;
+      } else if (comp.id) {
+        thumb = `<div class="swap-thumb-loading" data-thumb-id="${escAttr(comp.id)}"></div>`;
+      } else {
+        thumb = `<div class="swap-thumb-placeholder">${compSvg}</div>`;
+      }
 
       if (isSet) {
         html += `<div class="swap-component-item" data-picker-set="${escAttr(comp.key || comp.id)}" data-set-name="${escAttr(comp.name)}" data-set-variants='${escAttr(JSON.stringify(comp.variants || []))}'>
@@ -1838,9 +1868,12 @@
 
     let html = '';
     for (const v of s.currentSet.variants) {
-      const thumb = v.thumbnailUrl
-        ? `<img class="swap-thumb" src="${v.thumbnailUrl}" />`
-        : `<div class="swap-thumb-placeholder">${compSvg}</div>`;
+      let thumb;
+      if (v.thumbnailUrl) {
+        thumb = `<img class="swap-thumb" src="${escAttr(v.thumbnailUrl)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div class="swap-thumb-placeholder" style="display:none">${compSvg}</div>`;
+      } else {
+        thumb = `<div class="swap-thumb-placeholder">${compSvg}</div>`;
+      }
       html += `<div class="swap-component-item" data-picker-apply="${escAttr(v.key || v.id)}">
         ${thumb}
         <div class="swap-comp-info"><div class="swap-comp-name">${escHtml(v.name)}</div></div>
@@ -1950,11 +1983,18 @@
 
     if (msg.type === 'thumbnails') {
       Object.assign(thumbnailCache, msg.thumbnails || {});
-      // Update existing thumbnail placeholders
       for (const [id, url] of Object.entries(msg.thumbnails || {})) {
         document.querySelectorAll(`[data-thumb-id="${id}"]`).forEach(el => {
-          el.src = url;
-          el.style.display = 'block';
+          if (el.tagName === 'IMG') {
+            el.src = url;
+            el.style.display = 'block';
+          } else {
+            // Replace shimmer div with img
+            const img = document.createElement('img');
+            img.className = 'swap-thumb';
+            img.src = url;
+            el.replaceWith(img);
+          }
         });
       }
     }
@@ -2023,6 +2063,19 @@
       if (swapPickerState) {
         swapPickerState.libraryCache['__local__'] = { folders: msg.folders };
         renderSwapPickerBody();
+
+        // Request thumbnails for local components (first 30)
+        const ids = [];
+        for (const folder of msg.folders) {
+          for (const comp of folder.components) {
+            if (comp.id && !thumbnailCache[comp.id] && ids.length < 30) {
+              ids.push(comp.id);
+            }
+          }
+        }
+        if (ids.length > 0) {
+          postMsg({ type: 'get-thumbnails', nodeIds: ids });
+        }
       }
     }
 
