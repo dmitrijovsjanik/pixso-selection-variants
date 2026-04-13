@@ -588,6 +588,29 @@
     opacity: 0.35;
     pointer-events: none;
   }
+
+  /* ─── Loading state ─── */
+  .loading-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 24px;
+    color: var(--neutral-9);
+  }
+
+  .spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--neutral-3);
+    border-top-color: var(--brand-9);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    margin-right: 10px;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
 </style>
 </head>
 <body>
@@ -1127,6 +1150,12 @@
   window.onmessage = (event) => {
     const msg = event.data.pluginMessage;
     if (!msg) return;
+
+    if (msg.type === 'loading') {
+      const loadingHtml = `<div class="loading-state"><div class="spinner"></div>Loading...</div>`;
+      document.getElementById('variants-tab').innerHTML = loadingHtml;
+      document.getElementById('instances-tab').innerHTML = loadingHtml;
+    }
 
     if (msg.type === 'selection-data') {
       currentData = msg.data;

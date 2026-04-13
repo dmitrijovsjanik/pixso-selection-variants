@@ -307,7 +307,10 @@ sendSelectionData();
 
 // Listen for selection changes
 pixso.on("selectionchange", () => {
-  sendSelectionData();
+  pixso.ui.postMessage({ type: "loading" });
+  setTimeout(() => {
+    sendSelectionData();
+  }, 10);
 });
 
 // Listen for messages from UI
