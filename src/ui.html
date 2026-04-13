@@ -377,6 +377,203 @@
     text-align: center;
   }
 
+  /* ─── Swap Picker Panel ─── */
+  .swap-picker {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: var(--neutral-0);
+    display: flex;
+    flex-direction: column;
+    animation: slideIn 0.15s ease;
+  }
+
+  .swap-picker-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--neutral-3);
+    flex-shrink: 0;
+  }
+
+  .swap-picker-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--neutral-12);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+
+  .swap-picker-search {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--neutral-3);
+    flex-shrink: 0;
+  }
+
+  .swap-picker-search input {
+    width: 100%;
+    height: 32px;
+    padding: 6px 10px 6px 30px;
+    border: 1px solid var(--neutral-3);
+    border-radius: var(--radius-lg);
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--neutral-12);
+    background: var(--neutral-0) url("data:image/svg+xml,%3Csvg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238c8c8c' stroke-width='2' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='M21 21l-4.35-4.35'/%3E%3C/svg%3E") no-repeat 10px center;
+    background-size: 14px;
+    outline: none;
+    box-sizing: border-box;
+    transition: border-color var(--transition-fast);
+  }
+
+  .swap-picker-search input:focus {
+    border-color: var(--brand-9);
+  }
+
+  .swap-picker-search input::placeholder {
+    color: var(--neutral-a-9);
+  }
+
+  .swap-picker-body {
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .swap-picker-section {
+    padding: 8px 0;
+  }
+
+  .swap-picker-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--neutral-9);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 4px 12px 6px;
+  }
+
+  .swap-source-item,
+  .swap-folder-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    font-size: 13px;
+    color: var(--neutral-12);
+  }
+
+  .swap-source-item:hover,
+  .swap-folder-item:hover {
+    background: var(--neutral-2);
+  }
+
+  .swap-source-icon,
+  .swap-folder-icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--neutral-9);
+  }
+
+  .swap-item-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .swap-item-chevron {
+    flex-shrink: 0;
+    color: var(--neutral-5);
+  }
+
+  .swap-item-count {
+    font-size: 11px;
+    color: var(--neutral-9);
+    flex-shrink: 0;
+  }
+
+  .swap-component-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+
+  .swap-component-item:hover {
+    background: var(--brand-a-3);
+  }
+
+  .swap-thumb {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    border-radius: var(--radius-sm);
+    background: var(--neutral-a-2);
+    flex-shrink: 0;
+  }
+
+  .swap-thumb-placeholder {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    background: var(--neutral-a-2);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--neutral-5);
+  }
+
+  .swap-comp-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .swap-comp-name {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--neutral-12);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .swap-comp-source {
+    font-size: 10px;
+    color: var(--neutral-9);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .swap-picker-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    color: var(--neutral-9);
+    font-size: 12px;
+    gap: 8px;
+  }
+
+  .swap-picker-empty {
+    padding: 24px;
+    text-align: center;
+    color: var(--neutral-9);
+    font-size: 12px;
+  }
+
   /* ─── Toggle/Switch (fast.ui.kit Switcher: 24x14 small) ─── */
   .toggle {
     display: inline-flex;
@@ -755,6 +952,11 @@
   let parentInfo = null;  // {id, name} or null
   let swapOptionsMap = {}; // propName -> [{id, name}]
   let thumbnailCache = {}; // nodeId -> dataUrl
+
+  // ─── Swap Picker State ───
+  let swapPickerState = null;
+  // When active: { propertyName, instanceId, componentName, level, history[], sources, libraryCache, preferredValues, searchResults }
+  // level: "sources" | "folders" | "components" | "variants"
 
   // ─── Tab switching ───
   document.querySelectorAll('.tab').forEach(tab => {
@@ -1176,89 +1378,15 @@
 
   // ─── Attach event listeners ───
   function attachEventListeners() {
-    // Open swap dropdown with search
+    // Open swap picker
     document.querySelectorAll('[data-open-swap-search]').forEach(el => {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
-        const propName = el.dataset.swapProp;
-        const instanceId = el.dataset.swapInstance || null;
-        const compName = el.dataset.swapComponent || null;
-
-        const wrap = el.parentElement;
-        const existingOptions = swapOptionsMap[propName];
-        const hasQuickSwap = existingOptions && existingOptions.length > 0;
-
-        // Build quick swap items if already resolved
-        let quickSwapHtml = '';
-        if (hasQuickSwap) {
-          quickSwapHtml = existingOptions.map(opt =>
-            `<div class="swap-search-item" data-apply-swap="${escAttr(opt.id)}"
-              data-apply-prop="${escAttr(propName)}"
-              ${instanceId ? `data-apply-instance="${escAttr(instanceId)}"` : ''}
-              ${compName ? `data-apply-component="${escAttr(compName)}"` : ''}
-            >${escHtml(opt.name)}</div>`
-          ).join('');
-        }
-
-        wrap.innerHTML = `<div class="swap-search-wrap">
-          <input class="swap-search-input" type="text" placeholder="Search components..." autofocus
-            data-swap-prop="${escAttr(propName)}"
-            ${instanceId ? `data-swap-instance="${escAttr(instanceId)}"` : ''}
-            ${compName ? `data-swap-component="${escAttr(compName)}"` : ''} />
-          <div class="swap-search-results">
-            ${quickSwapHtml || '<div class="swap-search-hint">Type to search</div>'}
-          </div>
-        </div>`;
-
-        const input = wrap.querySelector('.swap-search-input');
-        const resultsDiv = wrap.querySelector('.swap-search-results');
-        input.focus();
-
-        // Bind click on quick swap items
-        bindSwapResultClicks(resultsDiv);
-
-        // If no quick swap yet, request them
-        if (!hasQuickSwap) {
-          postMsg({ type: 'resolve-swap-options', propertyName: propName });
-        }
-
-        let debounceTimer = null;
-        input.addEventListener('input', () => {
-          clearTimeout(debounceTimer);
-          const q = input.value.trim();
-          if (q.length < 2) {
-            // Show quick swap or hint
-            if (hasQuickSwap) {
-              resultsDiv.innerHTML = quickSwapHtml;
-              bindSwapResultClicks(resultsDiv);
-            } else {
-              resultsDiv.innerHTML = '<div class="swap-search-hint">Type to search</div>';
-            }
-            return;
-          }
-          resultsDiv.innerHTML = '<div class="swap-search-hint">Searching...</div>';
-          debounceTimer = setTimeout(() => {
-            postMsg({
-              type: 'search-components',
-              query: q,
-              propertyName: propName,
-              instanceId: instanceId,
-              componentName: compName,
-            });
-          }, 300);
-        });
-
-        // Close on blur
-        input.addEventListener('blur', () => {
-          setTimeout(() => {
-            if (!wrap.contains(document.activeElement)) {
-              if (currentData) {
-                renderVariantsTab(currentData);
-                renderInstancesTab(currentData);
-              }
-            }
-          }, 200);
-        });
+        openSwapPicker(
+          el.dataset.swapProp,
+          el.dataset.swapInstance || null,
+          el.dataset.swapComponent || null
+        );
       });
     });
 
@@ -1376,6 +1504,357 @@
   }
 
   // ─── Bind click on swap search result items ───
+  // ─── Swap Picker Functions ───
+
+  const chevronSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>`;
+  const folderSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>`;
+  const librarySvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>`;
+  const compSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>`;
+
+  function openSwapPicker(propertyName, instanceId, componentName) {
+    swapPickerState = {
+      propertyName,
+      instanceId,
+      componentName,
+      level: 'sources',
+      history: [],
+      sources: null,
+      libraryCache: {},
+      preferredValues: null,
+      searchResults: null,
+      currentSource: null,
+      currentFolder: null,
+      currentSet: null,
+    };
+    renderSwapPicker();
+    postMsg({ type: 'get-swap-sources' });
+    postMsg({ type: 'get-preferred-swap-values', propertyName });
+  }
+
+  function closeSwapPicker() {
+    swapPickerState = null;
+    const el = document.querySelector('.swap-picker');
+    if (el) el.remove();
+  }
+
+  function navigateSwapPicker(level, data) {
+    if (!swapPickerState) return;
+    swapPickerState.history.push({
+      level: swapPickerState.level,
+      currentSource: swapPickerState.currentSource,
+      currentFolder: swapPickerState.currentFolder,
+      currentSet: swapPickerState.currentSet,
+    });
+    swapPickerState.level = level;
+    Object.assign(swapPickerState, data);
+    swapPickerState.searchResults = null; // clear search on navigate
+    renderSwapPicker();
+  }
+
+  function navigateSwapBack() {
+    if (!swapPickerState) return;
+    if (swapPickerState.history.length === 0) {
+      closeSwapPicker();
+      return;
+    }
+    const prev = swapPickerState.history.pop();
+    swapPickerState.level = prev.level;
+    swapPickerState.currentSource = prev.currentSource;
+    swapPickerState.currentFolder = prev.currentFolder;
+    swapPickerState.currentSet = prev.currentSet;
+    swapPickerState.searchResults = null;
+    renderSwapPicker();
+  }
+
+  function applySwapFromPicker(componentIdOrKey) {
+    if (!swapPickerState) return;
+    postMsg({
+      type: 'apply-swap-from-search',
+      componentIdOrKey,
+      propertyName: swapPickerState.propertyName,
+      instanceId: swapPickerState.instanceId || null,
+      bulkComponentName: swapPickerState.componentName || null,
+    });
+    closeSwapPicker();
+  }
+
+  function renderSwapPicker() {
+    if (!swapPickerState) return;
+    const s = swapPickerState;
+
+    // Remove existing
+    let picker = document.querySelector('.swap-picker');
+    if (!picker) {
+      picker = document.createElement('div');
+      picker.className = 'swap-picker';
+      document.body.appendChild(picker);
+    }
+
+    // Title
+    let title = 'Choose component';
+    if (s.level === 'folders' && s.currentSource) title = s.currentSource.name;
+    if (s.level === 'components' && s.currentFolder) title = s.currentFolder;
+    if (s.level === 'variants' && s.currentSet) title = s.currentSet.name;
+
+    let html = `<div class="swap-picker-header">
+      <button class="btn-back" id="swap-picker-back">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <span class="swap-picker-title">${escHtml(title)}</span>
+    </div>`;
+
+    html += `<div class="swap-picker-search">
+      <input type="text" id="swap-picker-search-input" placeholder="Search..." value="${escAttr(s.searchQuery || '')}" />
+    </div>`;
+
+    html += `<div class="swap-picker-body" id="swap-picker-body">`;
+
+    if (s.searchResults) {
+      html += renderPickerSearchResults(s.searchResults);
+    } else if (s.level === 'sources') {
+      html += renderPickerSources();
+    } else if (s.level === 'folders') {
+      html += renderPickerFolders();
+    } else if (s.level === 'components') {
+      html += renderPickerComponents();
+    } else if (s.level === 'variants') {
+      html += renderPickerVariants();
+    }
+
+    html += `</div>`;
+    picker.innerHTML = html;
+
+    // Bind events
+    document.getElementById('swap-picker-back').addEventListener('click', navigateSwapBack);
+
+    const searchInput = document.getElementById('swap-picker-search-input');
+    let searchTimer = null;
+    searchInput.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      const q = searchInput.value.trim();
+      s.searchQuery = q;
+      if (q.length < 2) {
+        s.searchResults = null;
+        renderSwapPickerBody();
+        return;
+      }
+      document.getElementById('swap-picker-body').innerHTML =
+        `<div class="swap-picker-loading"><div class="spinner"></div>Searching...</div>`;
+      searchTimer = setTimeout(() => {
+        postMsg({ type: 'search-swap-all', query: q });
+      }, 300);
+    });
+    searchInput.focus();
+
+    bindPickerClicks();
+  }
+
+  function renderSwapPickerBody() {
+    if (!swapPickerState) return;
+    const body = document.getElementById('swap-picker-body');
+    if (!body) return;
+    const s = swapPickerState;
+
+    if (s.searchResults) {
+      body.innerHTML = renderPickerSearchResults(s.searchResults);
+    } else if (s.level === 'sources') {
+      body.innerHTML = renderPickerSources();
+    } else if (s.level === 'folders') {
+      body.innerHTML = renderPickerFolders();
+    } else if (s.level === 'components') {
+      body.innerHTML = renderPickerComponents();
+    } else if (s.level === 'variants') {
+      body.innerHTML = renderPickerVariants();
+    }
+
+    bindPickerClicks();
+  }
+
+  function renderPickerSources() {
+    const s = swapPickerState;
+    let html = '';
+
+    // Quick swap
+    if (s.preferredValues && s.preferredValues.length > 0) {
+      html += `<div class="swap-picker-section">`;
+      html += `<div class="swap-picker-section-title">Quick swap</div>`;
+      for (const pv of s.preferredValues) {
+        const thumb = pv.thumbnailDataUrl
+          ? `<img class="swap-thumb" src="${pv.thumbnailDataUrl}" />`
+          : `<div class="swap-thumb-placeholder">${compSvg}</div>`;
+        html += `<div class="swap-component-item" data-picker-apply="${escAttr(pv.id)}">
+          ${thumb}
+          <div class="swap-comp-info"><div class="swap-comp-name">${escHtml(pv.name)}</div></div>
+        </div>`;
+      }
+      html += `</div>`;
+    }
+
+    // Sources
+    if (s.sources) {
+      html += `<div class="swap-picker-section">`;
+      html += `<div class="swap-picker-section-title">Sources</div>`;
+      for (const src of s.sources) {
+        const icon = src.type === 'local' ? folderSvg : librarySvg;
+        html += `<div class="swap-source-item" data-picker-source="${escAttr(src.key)}" data-source-name="${escAttr(src.name)}" data-source-type="${escAttr(src.type)}">
+          <span class="swap-source-icon">${icon}</span>
+          <span class="swap-item-name">${escHtml(src.name)}</span>
+          <span class="swap-item-chevron">${chevronSvg}</span>
+        </div>`;
+      }
+      html += `</div>`;
+    } else {
+      html += `<div class="swap-picker-loading"><div class="spinner"></div>Loading sources...</div>`;
+    }
+
+    return html;
+  }
+
+  function renderPickerFolders() {
+    const s = swapPickerState;
+    const cacheKey = s.currentSource?.key;
+    const data = s.libraryCache[cacheKey];
+
+    if (!data) {
+      return `<div class="swap-picker-loading"><div class="spinner"></div>Loading...</div>`;
+    }
+
+    let html = '';
+    for (const folder of data.folders) {
+      html += `<div class="swap-folder-item" data-picker-folder="${escAttr(folder.name)}">
+        <span class="swap-folder-icon">${folderSvg}</span>
+        <span class="swap-item-name">${escHtml(folder.name)}</span>
+        <span class="swap-item-count">${folder.components.length}</span>
+        <span class="swap-item-chevron">${chevronSvg}</span>
+      </div>`;
+    }
+
+    return html || `<div class="swap-picker-empty">No components found</div>`;
+  }
+
+  function renderPickerComponents() {
+    const s = swapPickerState;
+    const cacheKey = s.currentSource?.key;
+    const data = s.libraryCache[cacheKey];
+    if (!data) return `<div class="swap-picker-empty">No data</div>`;
+
+    const folder = data.folders.find(f => f.name === s.currentFolder);
+    if (!folder) return `<div class="swap-picker-empty">Folder not found</div>`;
+
+    let html = '';
+    for (const comp of folder.components) {
+      const isSet = comp.type === 'COMPONENT_SET';
+      const thumb = comp.thumbnailUrl
+        ? `<img class="swap-thumb" src="${comp.thumbnailUrl}" />`
+        : (comp.thumbnailDataUrl
+          ? `<img class="swap-thumb" src="${comp.thumbnailDataUrl}" />`
+          : `<div class="swap-thumb-placeholder">${compSvg}</div>`);
+
+      if (isSet) {
+        html += `<div class="swap-component-item" data-picker-set="${escAttr(comp.key || comp.id)}" data-set-name="${escAttr(comp.name)}" data-set-variants='${escAttr(JSON.stringify(comp.variants || []))}'>
+          ${thumb}
+          <div class="swap-comp-info">
+            <div class="swap-comp-name">${escHtml(comp.name)}</div>
+            <div class="swap-comp-source">${(comp.variants || []).length} variants</div>
+          </div>
+          <span class="swap-item-chevron">${chevronSvg}</span>
+        </div>`;
+      } else {
+        html += `<div class="swap-component-item" data-picker-apply="${escAttr(comp.key || comp.id)}">
+          ${thumb}
+          <div class="swap-comp-info"><div class="swap-comp-name">${escHtml(comp.name)}</div></div>
+        </div>`;
+      }
+    }
+
+    return html || `<div class="swap-picker-empty">No components</div>`;
+  }
+
+  function renderPickerVariants() {
+    const s = swapPickerState;
+    if (!s.currentSet || !s.currentSet.variants) {
+      return `<div class="swap-picker-empty">No variants</div>`;
+    }
+
+    let html = '';
+    for (const v of s.currentSet.variants) {
+      const thumb = v.thumbnailUrl
+        ? `<img class="swap-thumb" src="${v.thumbnailUrl}" />`
+        : `<div class="swap-thumb-placeholder">${compSvg}</div>`;
+      html += `<div class="swap-component-item" data-picker-apply="${escAttr(v.key || v.id)}">
+        ${thumb}
+        <div class="swap-comp-info"><div class="swap-comp-name">${escHtml(v.name)}</div></div>
+      </div>`;
+    }
+
+    return html;
+  }
+
+  function renderPickerSearchResults(results) {
+    if (!results || results.length === 0) {
+      return `<div class="swap-picker-empty">No components found</div>`;
+    }
+
+    let html = '';
+    for (const r of results) {
+      const thumb = r.thumbnailUrl
+        ? `<img class="swap-thumb" src="${r.thumbnailUrl}" />`
+        : `<div class="swap-thumb-placeholder">${compSvg}</div>`;
+      html += `<div class="swap-component-item" data-picker-apply="${escAttr(r.id)}">
+        ${thumb}
+        <div class="swap-comp-info">
+          <div class="swap-comp-name">${escHtml(r.name)}</div>
+          ${r.source ? `<div class="swap-comp-source">${escHtml(r.source)}</div>` : ''}
+        </div>
+      </div>`;
+    }
+
+    return html;
+  }
+
+  function bindPickerClicks() {
+    // Apply swap
+    document.querySelectorAll('[data-picker-apply]').forEach(el => {
+      el.addEventListener('click', () => applySwapFromPicker(el.dataset.pickerApply));
+    });
+
+    // Navigate to source
+    document.querySelectorAll('[data-picker-source]').forEach(el => {
+      el.addEventListener('click', () => {
+        const key = el.dataset.pickerSource;
+        const name = el.dataset.sourceName;
+        const type = el.dataset.sourceType;
+        navigateSwapPicker('folders', { currentSource: { key, name, type } });
+        if (type === 'local') {
+          postMsg({ type: 'get-local-components' });
+        } else {
+          if (!swapPickerState.libraryCache[key]) {
+            postMsg({ type: 'get-library-contents', libraryKey: key });
+          } else {
+            renderSwapPickerBody();
+          }
+        }
+      });
+    });
+
+    // Navigate to folder
+    document.querySelectorAll('[data-picker-folder]').forEach(el => {
+      el.addEventListener('click', () => {
+        navigateSwapPicker('components', { currentFolder: el.dataset.pickerFolder });
+      });
+    });
+
+    // Navigate to component set (variants)
+    document.querySelectorAll('[data-picker-set]').forEach(el => {
+      el.addEventListener('click', () => {
+        const variants = JSON.parse(el.dataset.setVariants || '[]');
+        navigateSwapPicker('variants', {
+          currentSet: { key: el.dataset.pickerSet, name: el.dataset.setName, variants },
+        });
+      });
+    });
+  }
+
   function bindSwapResultClicks(container) {
     container.querySelectorAll('.swap-search-item').forEach(item => {
       item.addEventListener('mousedown', (e) => {
@@ -1458,12 +1937,49 @@
 
     if (msg.type === 'swap-options') {
       const newOptions = msg.swapOptionsMap || {};
-      // Merge with existing (don't lose previously resolved ones)
       Object.assign(swapOptionsMap, newOptions);
-      // Re-render to show dropdowns instead of read-only values
       if (currentData) {
         renderVariantsTab(currentData);
         renderInstancesTab(currentData);
+      }
+    }
+
+    // ─── Swap Picker messages ───
+
+    if (msg.type === 'swap-sources') {
+      if (swapPickerState) {
+        swapPickerState.sources = msg.sources;
+        renderSwapPickerBody();
+      }
+    }
+
+    if (msg.type === 'preferred-swap-values') {
+      if (swapPickerState && swapPickerState.propertyName === msg.propertyName) {
+        swapPickerState.preferredValues = msg.values;
+        if (swapPickerState.level === 'sources') {
+          renderSwapPickerBody();
+        }
+      }
+    }
+
+    if (msg.type === 'library-contents') {
+      if (swapPickerState) {
+        swapPickerState.libraryCache[msg.libraryKey] = { folders: msg.folders };
+        renderSwapPickerBody();
+      }
+    }
+
+    if (msg.type === 'local-contents') {
+      if (swapPickerState) {
+        swapPickerState.libraryCache['__local__'] = { folders: msg.folders };
+        renderSwapPickerBody();
+      }
+    }
+
+    if (msg.type === 'swap-search-results') {
+      if (swapPickerState) {
+        swapPickerState.searchResults = msg.results;
+        renderSwapPickerBody();
       }
     }
   };

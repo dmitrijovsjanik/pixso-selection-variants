@@ -841,6 +841,256 @@ pixso.ui.on("message", (msg: any) => {
     });
   }
 
+  if (msg.type === "get-swap-sources") {
+    pixso.getLibraryListAsync().then((libraries) => {
+      const sources: { key: string; name: string; type: string }[] = [];
+
+      // Check if local components exist
+      let hasLocal = false;
+      function checkLocal(node: BaseNode) {
+        if (hasLocal) return;
+        if ("type" in node) {
+          if (node.type === "COMPONENT" || node.type === "COMPONENT_SET") {
+            hasLocal = true;
+            return;
+          }
+          if ("children" in node && node.type !== "INSTANCE") {
+            for (const child of (node as any).children) {
+              checkLocal(child);
+              if (hasLocal) return;
+            }
+          }
+        }
+      }
+      checkLocal(pixso.currentPage);
+
+      if (hasLocal) {
+        sources.push({ key: "__local__", name: "Local components", type: "local" });
+      }
+
+      for (const lib of libraries) {
+        if (lib.subscribed) {
+          sources.push({ key: lib.key, name: lib.name, type: "library" });
+        }
+      }
+
+      pixso.ui.postMessage({ type: "swap-sources", sources });
+    });
+  }
+
+  if (msg.type === "get-library-contents") {
+    const { libraryKey } = msg;
+    pixso.getLibraryByKeyAsync(libraryKey).then((assets) => {
+      const folderMap: { [name: string]: any[] } = {};
+
+      for (const comp of assets.componentList) {
+        const folder = comp.containerName || comp.pageName || "Other";
+        if (!folderMap[folder]) folderMap[folder] = [];
+
+        if (comp.type === "COMPONENT_SET") {
+          folderMap[folder].push({
+            key: comp.key,
+            name: comp.name,
+            thumbnailUrl: comp.thumbnailUrl,
+            type: "COMPONENT_SET",
+            variants: comp.variants.map((v) => ({
+              key: v.key,
+              name: v.name,
+              thumbnailUrl: v.thumbnailUrl,
+            })),
+          });
+        } else {
+          folderMap[folder].push({
+            key: comp.key,
+            name: comp.name,
+            thumbnailUrl: comp.thumbnailUrl,
+            type: "COMPONENT",
+          });
+        }
+      }
+
+      const folders = Object.entries(folderMap).map(([name, components]) => ({
+        name,
+        components,
+      }));
+
+      pixso.ui.postMessage({ type: "library-contents", libraryKey, folders });
+    });
+  }
+
+  if (msg.type === "get-local-components") {
+    const folderMap: { [name: string]: { id: string; name: string; type: string; variants?: { id: string; name: string }[] }[] } = {};
+
+    function walkForComponents(node: BaseNode, folderName: string) {
+      if ("type" in node) {
+        if (node.type === "COMPONENT_SET") {
+          const variants = [];
+          if ("children" in node) {
+            for (const child of (node as any).children) {
+              if (child.type === "COMPONENT") {
+                variants.push({ id: child.id, name: child.name });
+              }
+            }
+          }
+          if (!folderMap[folderName]) folderMap[folderName] = [];
+          folderMap[folderName].push({
+            id: node.id,
+            name: node.name,
+            type: "COMPONENT_SET",
+            variants,
+          });
+        } else if (node.type === "COMPONENT") {
+          // Only add if not inside a component set
+          const parent = node.parent;
+          if (!parent || parent.type !== "COMPONENT_SET") {
+            if (!folderMap[folderName]) folderMap[folderName] = [];
+            folderMap[folderName].push({
+              id: node.id,
+              name: node.name,
+              type: "COMPONENT",
+            });
+          }
+        } else if ("children" in node && node.type !== "INSTANCE") {
+          // Use frame name as folder for top-level frames
+          const nextFolder = (node.type === "FRAME" || node.type === "SECTION") && node.parent?.type === "PAGE"
+            ? node.name
+            : folderName;
+          for (const child of (node as any).children) {
+            walkForComponents(child, nextFolder);
+          }
+        }
+      }
+    }
+
+    walkForComponents(pixso.currentPage, "Page");
+
+    const folders = Object.entries(folderMap).map(([name, components]) => ({
+      name,
+      components,
+    }));
+
+    pixso.ui.postMessage({ type: "local-contents", folders });
+  }
+
+  if (msg.type === "search-swap-all") {
+    const { query } = msg;
+    const q = query.toLowerCase();
+
+    pixso.getLibraryListAsync().then(async (libraries) => {
+      const results: { id: string; name: string; thumbnailUrl?: string; source: string }[] = [];
+
+      // Search local components
+      function searchLocal(node: BaseNode) {
+        if (results.length >= 30) return;
+        if ("type" in node) {
+          if (node.type === "COMPONENT") {
+            const parent = node.parent;
+            if (parent && parent.type === "COMPONENT_SET") {
+              if ((parent.name + " / " + node.name).toLowerCase().includes(q)) {
+                results.push({ id: node.id, name: parent.name + " / " + node.name, source: "Local" });
+              }
+            } else if (node.name.toLowerCase().includes(q)) {
+              results.push({ id: node.id, name: node.name, source: "Local" });
+            }
+          } else if (node.type === "COMPONENT_SET") {
+            // Search variants inside
+            if ("children" in node) {
+              for (const child of (node as any).children) {
+                if (results.length >= 30) break;
+                if (child.type === "COMPONENT" && (node.name + " / " + child.name).toLowerCase().includes(q)) {
+                  results.push({ id: child.id, name: node.name + " / " + child.name, source: "Local" });
+                }
+              }
+            }
+          }
+          if ("children" in node && node.type !== "INSTANCE" && node.type !== "COMPONENT_SET") {
+            for (const child of (node as any).children) {
+              searchLocal(child);
+            }
+          }
+        }
+      }
+      searchLocal(pixso.currentPage);
+
+      // Search subscribed libraries
+      for (const lib of libraries) {
+        if (!lib.subscribed || results.length >= 30) continue;
+        try {
+          const assets = await pixso.getLibraryByKeyAsync(lib.key);
+          for (const comp of assets.componentList) {
+            if (results.length >= 30) break;
+            if (comp.type === "COMPONENT_SET") {
+              if (comp.name.toLowerCase().includes(q)) {
+                for (const v of comp.variants) {
+                  if (results.length >= 30) break;
+                  results.push({
+                    id: v.key,
+                    name: comp.name + " / " + v.name,
+                    thumbnailUrl: v.thumbnailUrl,
+                    source: lib.name,
+                  });
+                }
+              }
+            } else if (comp.name.toLowerCase().includes(q)) {
+              results.push({
+                id: comp.key,
+                name: comp.name,
+                thumbnailUrl: comp.thumbnailUrl,
+                source: lib.name,
+              });
+            }
+          }
+        } catch {}
+      }
+
+      pixso.ui.postMessage({ type: "swap-search-results", results });
+    });
+  }
+
+  if (msg.type === "get-preferred-swap-values") {
+    const { propertyName } = msg;
+    const data = analyzeSelectionSync();
+
+    let keys: string[] = [];
+    for (const inst of data.instances) {
+      for (const cp of inst.componentProperties) {
+        if (cp.name === propertyName && cp.type === "INSTANCE_SWAP" && cp.preferredValues) {
+          keys = cp.preferredValues;
+          break;
+        }
+      }
+      if (keys.length > 0) break;
+    }
+
+    if (keys.length === 0) {
+      pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [] });
+      return;
+    }
+
+    Promise.all(
+      keys.map(async (key) => {
+        try {
+          const comp = await pixso.importComponentByKeyAsync(key);
+          // Try to get thumbnail
+          let thumbnailDataUrl = "";
+          try {
+            const bytes = await comp.exportAsync({
+              format: "PNG",
+              constraint: { type: "HEIGHT", value: 32 },
+            } as ExportSettingsImage);
+            thumbnailDataUrl = `data:image/png;base64,${pixso.base64Encode(bytes)}`;
+          } catch {}
+          return { id: comp.id, name: comp.name, thumbnailDataUrl };
+        } catch {
+          return null;
+        }
+      })
+    ).then((resolved) => {
+      const values = resolved.filter((r): r is NonNullable<typeof r> => r !== null);
+      pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values });
+    });
+  }
+
   if (msg.type === "refresh") {
     sendSelectionData();
   }
