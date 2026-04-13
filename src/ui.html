@@ -334,18 +334,137 @@
 
   /* ─── Bulk section ─── */
   .bulk-section {
-    padding: 8px 12px;
-    background: var(--brand-a-3);
-    border-top: 1px solid var(--brand-3);
+    padding: 10px 12px;
+  }
+
+  .bulk-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
   }
 
   .bulk-title {
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 600;
+    color: var(--neutral-12);
+  }
+
+  .btn-instances {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 500;
     color: var(--brand-11);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 6px;
+    background: var(--brand-a-3);
+    border: none;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    font-family: inherit;
+  }
+
+  .btn-instances:hover {
+    background: var(--brand-a-4);
+  }
+
+  .btn-instances svg {
+    flex-shrink: 0;
+  }
+
+  /* ─── Detail view (individual instances) ─── */
+  .detail-view {
+    animation: slideIn 0.15s ease;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .detail-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--neutral-1);
+    border-bottom: 1px solid var(--neutral-3);
+    position: sticky;
+    top: 34px;
+    z-index: 5;
+  }
+
+  .btn-back {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: var(--neutral-a-3);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    color: var(--neutral-11);
+    transition: all var(--transition-fast);
+    flex-shrink: 0;
+  }
+
+  .btn-back:hover {
+    background: var(--neutral-a-4);
+    color: var(--neutral-12);
+  }
+
+  .detail-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--neutral-12);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .detail-count {
+    font-size: 11px;
+    color: var(--neutral-9);
+    font-weight: 500;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  .detail-instance {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--neutral-a-2);
+  }
+
+  .detail-instance-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    cursor: pointer;
+  }
+
+  .detail-instance-header:hover .detail-instance-name {
+    color: var(--brand-9);
+  }
+
+  .detail-instance-name {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--neutral-11);
+    transition: color var(--transition-fast);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .detail-instance-icon {
+    width: 14px;
+    height: 14px;
+    color: var(--brand-9);
+    flex-shrink: 0;
   }
 
   /* ─── Collapse arrow ─── */
@@ -400,6 +519,7 @@
 <script>
   // ─── State ───
   let currentData = null;
+  let detailViewComponent = null; // null = bulk list, string = component name for detail view
 
   // ─── Tab switching ───
   document.querySelectorAll('.tab').forEach(tab => {
@@ -584,6 +704,7 @@
   function renderVariantsTab(data) {
     const container = document.getElementById('variants-tab');
     if (!data.hasSelection) {
+      detailViewComponent = null;
       container.innerHTML = renderEmpty('Select an object to see<br/>variant properties');
       return;
     }
@@ -592,10 +713,23 @@
     const names = Object.keys(groups);
 
     if (names.length === 0) {
+      detailViewComponent = null;
       container.innerHTML = renderEmpty('No instances found<br/>in selection');
       return;
     }
 
+    // If detail view is active but component no longer exists in selection, go back
+    if (detailViewComponent && !groups[detailViewComponent]) {
+      detailViewComponent = null;
+    }
+
+    // ─── Detail view: individual instances of one component ───
+    if (detailViewComponent) {
+      renderDetailView(container, data, detailViewComponent);
+      return;
+    }
+
+    // ─── Bulk list view (main) ───
     let html = `<div class="summary-bar"><strong>${data.instances.length}</strong> instance${data.instances.length > 1 ? 's' : ''} from <strong>${names.length}</strong> component${names.length > 1 ? 's' : ''}</div>`;
 
     for (const compName of names) {
@@ -624,9 +758,19 @@
       html += `<div class="component-body">`;
 
       // Bulk controls
-      if (instances.length > 1 && (merged.variants.length > 0 || merged.compProps.length > 0)) {
-        html += `<div class="bulk-section">`;
-        html += `<div class="bulk-title">Bulk Edit (${instances.length})</div>`;
+      html += `<div class="bulk-section">`;
+
+      if (merged.variants.length > 0 || merged.compProps.length > 0) {
+        html += `<div class="bulk-header">`;
+        html += `<span class="bulk-title">Bulk Edit</span>`;
+        if (instances.length > 1) {
+          html += `<button class="btn-instances" data-open-detail="${escAttr(compName)}">
+            ${instances.length} instances
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+          </button>`;
+        }
+        html += `</div>`;
+
         html += `<div class="properties">`;
         for (const vp of merged.variants) {
           html += renderPropertyControl(vp, null, true, compName);
@@ -636,41 +780,62 @@
             html += renderPropertyControl(cp, null, true, compName);
           }
         }
-        html += `</div></div>`;
+        html += `</div>`;
       }
 
-      // Individual instances
-      for (const inst of instances) {
-        if (inst.variantProperties.length === 0 && inst.componentProperties.length === 0) continue;
-
-        html += `<div class="instance-row" style="--depth: ${inst.depth}" data-click-instance="${escAttr(inst.id)}">`;
-        html += `<div class="instance-name">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
-          </svg>
-          ${escHtml(inst.name)}
-        </div>`;
-        if (inst.path) html += `<div class="instance-path" title="${escAttr(inst.path)}">${escHtml(inst.path)}</div>`;
-
-        html += `<div class="properties" onclick="event.stopPropagation()">`;
-        for (const vp of inst.variantProperties) {
-          html += renderPropertyControl({
-            name: vp.name,
-            type: 'VARIANT',
-            currentValue: vp.currentValue,
-            options: vp.options,
-          }, inst.id, false, null);
-        }
-        for (const cp of inst.componentProperties) {
-          if (cp.type !== 'VARIANT') {
-            html += renderPropertyControl(cp, inst.id, false, null);
-          }
-        }
-        html += `</div></div>`;
-      }
-
+      html += `</div>`;
       html += `</div></div>`;
     }
+
+    container.innerHTML = html;
+    attachEventListeners();
+  }
+
+  // ─── Render detail view for a single component's instances ───
+  function renderDetailView(container, data, compName) {
+    const instances = data.groupedByComponent[compName] || [];
+
+    let html = `<div class="detail-view">`;
+
+    // Header with back button
+    html += `<div class="detail-header">
+      <button class="btn-back" data-back-to-bulk title="Back to bulk view">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <span class="detail-title">${escHtml(compName)}</span>
+      <span class="detail-count">${instances.length} instances</span>
+    </div>`;
+
+    // Individual instances with their controls
+    for (const inst of instances) {
+      if (inst.variantProperties.length === 0 && inst.componentProperties.length === 0) continue;
+
+      html += `<div class="detail-instance">`;
+      html += `<div class="detail-instance-header" data-click-instance="${escAttr(inst.id)}">
+        <svg class="detail-instance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+        </svg>
+        <span class="detail-instance-name">${escHtml(inst.name)}</span>
+      </div>`;
+
+      html += `<div class="properties">`;
+      for (const vp of inst.variantProperties) {
+        html += renderPropertyControl({
+          name: vp.name,
+          type: 'VARIANT',
+          currentValue: vp.currentValue,
+          options: vp.options,
+        }, inst.id, false, null);
+      }
+      for (const cp of inst.componentProperties) {
+        if (cp.type !== 'VARIANT') {
+          html += renderPropertyControl(cp, inst.id, false, null);
+        }
+      }
+      html += `</div></div>`;
+    }
+
+    html += `</div>`;
 
     container.innerHTML = html;
     attachEventListeners();
@@ -740,6 +905,30 @@
       el.addEventListener('click', (e) => {
         if (e.target.closest('.btn-icon') || e.target.closest('.component-actions')) return;
         el.closest('.component-group').classList.toggle('collapsed');
+      });
+    });
+
+    // Open detail view for a component
+    document.querySelectorAll('[data-open-detail]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        detailViewComponent = el.dataset.openDetail;
+        if (currentData) renderVariantsTab(currentData);
+      });
+    });
+
+    // Back to bulk view
+    document.querySelectorAll('[data-back-to-bulk]').forEach(el => {
+      el.addEventListener('click', () => {
+        detailViewComponent = null;
+        if (currentData) renderVariantsTab(currentData);
+      });
+    });
+
+    // Click instance name in detail view to select
+    document.querySelectorAll('.detail-instance-header[data-click-instance]').forEach(el => {
+      el.addEventListener('click', () => {
+        postMsg({ type: 'select-instance', instanceId: el.dataset.clickInstance });
       });
     });
 
