@@ -1051,37 +1051,101 @@ pixso.ui.on("message", (msg: any) => {
     const { propertyName } = msg;
     const values: { id: string; name: string; thumbnailDataUrl: string }[] = [];
 
+    // Step 1: Get preferredValues keys from component property definition
+    let prefKeys: string[] = [];
     const sel = pixso.currentPage.selection;
     if (sel && sel.length > 0) {
-      // Walk all selected nodes and their children to find the instance with this swap property
       const stack: SceneNode[] = [...sel];
-
-      while (stack.length > 0 && values.length === 0) {
+      while (stack.length > 0 && prefKeys.length === 0) {
         const node = stack.pop()!;
-
         if (isInstanceNode(node)) {
-          // Check componentPropertyReferences on direct children
-          // The child whose mainComponent ref matches propertyName is the swap target
-          if (hasChildren(node)) {
+          const mc = node.mainComponent;
+          if (mc) {
+            let defs: ComponentPropertyDefinitions | null = null;
+            const p = mc.parent;
+            if (p && p.type === "COMPONENT_SET") {
+              defs = (p as ComponentSetNode).componentPropertyDefinitions;
+            } else {
+              defs = mc.componentPropertyDefinitions;
+            }
+            if (defs && defs[propertyName] && defs[propertyName].preferredValues) {
+              prefKeys = (defs[propertyName].preferredValues as any[]).map((pv: any) => pv.key);
+            }
+          }
+        }
+        if (prefKeys.length === 0 && hasChildren(node)) {
+          for (const c of node.children) stack.push(c);
+        }
+      }
+    }
+
+    console.log("[Swap] preferredValues keys:", prefKeys.length, prefKeys);
+
+    if (prefKeys.length > 0) {
+      // Step 2: Find these components in the document by their key
+      const keySet = new Set(prefKeys);
+      const foundKeys = new Set<string>();
+
+      function findByKey(node: BaseNode) {
+        if (foundKeys.size === keySet.size) return;
+        if ("type" in node) {
+          if (node.type === "COMPONENT" && "key" in node) {
+            const comp = node as ComponentNode;
+            if (keySet.has(comp.key)) {
+              const displayName = comp.parent?.type === "COMPONENT_SET"
+                ? comp.parent.name + " / " + comp.name
+                : comp.name;
+              values.push({ id: comp.id, name: displayName, thumbnailDataUrl: "" });
+              foundKeys.add(comp.key);
+            }
+          }
+          if ("children" in node) {
+            for (const child of (node as any).children) {
+              findByKey(child);
+            }
+          }
+        }
+      }
+
+      for (const page of pixso.root.children) {
+        findByKey(page);
+        if (foundKeys.size === keySet.size) break;
+      }
+
+      console.log("[Swap] Found locally:", foundKeys.size, "of", keySet.size);
+
+      // Step 3: Keys not found locally — send what we have, try import for the rest
+      if (foundKeys.size < keySet.size) {
+        pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [...values] });
+        const missing = prefKeys.filter(k => !foundKeys.has(k));
+        for (const key of missing) {
+          Promise.race([
+            pixso.importComponentByKeyAsync(key),
+            new Promise<null>((_, rej) => setTimeout(() => rej("timeout"), 3000)),
+          ]).then((comp: any) => {
+            if (comp) {
+              values.push({ id: comp.id, name: comp.name, thumbnailDataUrl: "" });
+              pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [...values] });
+            }
+          }).catch(() => {});
+        }
+      }
+    } else {
+      // No preferred values — try siblings via componentPropertyReferences
+      if (sel && sel.length > 0) {
+        const stack: SceneNode[] = [...sel];
+        while (stack.length > 0 && values.length === 0) {
+          const node = stack.pop()!;
+          if (isInstanceNode(node) && hasChildren(node)) {
             for (const child of node.children) {
               if ("componentPropertyReferences" in child) {
                 const refs = (child as any).componentPropertyReferences;
-                if (refs && refs.mainComponent === propertyName) {
-                  // This child is controlled by the swap property
-                  // If it's an instance, get siblings from its mainComponent's ComponentSet
-                  if (isInstanceNode(child)) {
-                    const mc = child.mainComponent;
-                    if (mc) {
-                      const parent = mc.parent;
-                      if (parent && parent.type === "COMPONENT_SET") {
-                        for (const sibling of (parent as ComponentSetNode).children) {
-                          if (isComponentNode(sibling)) {
-                            values.push({ id: sibling.id, name: sibling.name, thumbnailDataUrl: "" });
-                          }
-                        }
-                      } else {
-                        // Not in a set — just show the component itself
-                        values.push({ id: mc.id, name: mc.name, thumbnailDataUrl: "" });
+                if (refs && refs.mainComponent === propertyName && isInstanceNode(child)) {
+                  const mc = child.mainComponent;
+                  if (mc && mc.parent && mc.parent.type === "COMPONENT_SET") {
+                    for (const sibling of (mc.parent as ComponentSetNode).children) {
+                      if (isComponentNode(sibling)) {
+                        values.push({ id: sibling.id, name: sibling.name, thumbnailDataUrl: "" });
                       }
                     }
                   }
@@ -1090,59 +1154,14 @@ pixso.ui.on("message", (msg: any) => {
               }
             }
           }
-
-          // Fallback: check componentProperties directly
-          if (values.length === 0) {
-            const compProps = node.componentProperties;
-            if (compProps && compProps[propertyName] && compProps[propertyName].type === "INSTANCE_SWAP") {
-              const currentValueId = compProps[propertyName].value as string;
-              console.log("[Swap] Property", propertyName, "currentValue:", currentValueId);
-
-              const currentNode = pixso.getNodeById(currentValueId);
-              console.log("[Swap] currentValue ID:", currentValueId);
-              console.log("[Swap] getNodeById type:", currentNode?.type, "name:", currentNode?.name);
-              console.log("[Swap] parent type:", currentNode?.parent?.type, "name:", currentNode?.parent?.name);
-
-              // The value could be: ComponentNode ID, InstanceNode ID, or something else
-              // We need to find the ComponentNode and its ComponentSet
-              let targetComponent: ComponentNode | null = null;
-
-              if (currentNode) {
-                if (currentNode.type === "COMPONENT") {
-                  targetComponent = currentNode as ComponentNode;
-                } else if (currentNode.type === "INSTANCE") {
-                  // It's an instance — get its mainComponent
-                  targetComponent = (currentNode as InstanceNode).mainComponent;
-                  console.log("[Swap] Instance mainComponent:", targetComponent?.name, "parent:", targetComponent?.parent?.type, targetComponent?.parent?.name);
-                }
-              }
-
-              if (targetComponent) {
-                const componentSetParent = targetComponent.parent;
-                if (componentSetParent && componentSetParent.type === "COMPONENT_SET") {
-                  const cs = componentSetParent as ComponentSetNode;
-                  console.log("[Swap] ComponentSet found:", cs.name, "with", cs.children.length, "children");
-                  for (const sibling of cs.children) {
-                    if (isComponentNode(sibling)) {
-                      values.push({ id: sibling.id, name: sibling.name, thumbnailDataUrl: "" });
-                    }
-                  }
-                } else {
-                  console.log("[Swap] Component is standalone (no ComponentSet)");
-                  values.push({ id: targetComponent.id, name: targetComponent.name, thumbnailDataUrl: "" });
-                }
-              }
-            }
+          if (values.length === 0 && hasChildren(node)) {
+            for (const c of node.children) stack.push(c);
           }
-        }
-
-        if (values.length === 0 && hasChildren(node)) {
-          for (const c of node.children) stack.push(c);
         }
       }
     }
 
-    console.log("[Swap Picker] Found", values.length, "quick swap options for", propertyName);
+    console.log("[Swap Picker] Total quick swap options:", values.length);
     pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values });
   }
 
