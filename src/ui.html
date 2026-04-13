@@ -164,6 +164,7 @@
 
   .component-actions {
     display: flex;
+    align-items: center;
     gap: 4px;
   }
 
@@ -859,9 +860,12 @@
         <span class="component-name">
           <span class="collapse-arrow"></span>
           ${escHtml(compName)}
-          <span class="component-count">${instances.length}</span>
         </span>
         <div class="component-actions">
+          ${instances.length > 1 ? `<button class="btn-instances" data-open-detail="${escAttr(compName)}">
+            <span class="component-count">${instances.length}</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+          </button>` : ''}
           <button class="btn-icon" title="Select all instances" data-select-component="${escAttr(compName)}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
           </button>
@@ -874,15 +878,6 @@
       html += `<div class="bulk-section">`;
 
       if (merged.variants.length > 0 || merged.compProps.length > 0) {
-        html += `<div class="bulk-header">`;
-        html += `<span class="bulk-title">Bulk Edit</span>`;
-        if (instances.length > 1) {
-          html += `<button class="btn-instances" data-open-detail="${escAttr(compName)}">
-            ${instances.length} instances
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
-          </button>`;
-        }
-        html += `</div>`;
 
         html += `<div class="properties">`;
         for (const vp of merged.variants) {
@@ -982,9 +977,9 @@
         <span class="component-name">
           <span class="collapse-arrow"></span>
           ${escHtml(compName)}
-          <span class="component-count">${instances.length}</span>
         </span>
         <div class="component-actions">
+          <span class="component-count">${instances.length}</span>
           <button class="btn-icon" title="Select all" data-select-component="${escAttr(compName)}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
           </button>
