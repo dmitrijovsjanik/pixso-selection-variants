@@ -407,6 +407,12 @@ function findVariantComponent(
 
 console.log("[Selection Variants] Plugin starting...");
 pixso.showUI(__html__, { width: 360, height: 520 });
+// Enable window resize
+try {
+  (pixso.ui as any).enableResize = true;
+  (pixso.ui as any).minWidth = 280;
+  (pixso.ui as any).minHeight = 300;
+} catch {}
 console.log("[Selection Variants] UI shown");
 
 // Check if current selection has a parent (can go up)

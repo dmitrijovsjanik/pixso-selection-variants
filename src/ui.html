@@ -229,20 +229,21 @@
   .properties {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
   }
 
   .property-row {
     display: flex;
     align-items: center;
     gap: 8px;
+    min-height: 28px;
   }
 
   .property-label {
     font-size: 12px;
     font-weight: 500;
     color: var(--neutral-a-11);
-    min-width: 80px;
+    width: 50%;
     flex-shrink: 0;
     text-overflow: ellipsis;
     overflow: hidden;
@@ -250,7 +251,8 @@
   }
 
   .property-control {
-    flex: 1;
+    width: 50%;
+    flex-shrink: 0;
     min-width: 0;
   }
 
