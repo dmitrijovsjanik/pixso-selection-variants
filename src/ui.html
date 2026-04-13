@@ -270,10 +270,10 @@
     line-height: 20px;
     font-family: inherit;
     color: var(--neutral-12);
-    background: var(--neutral-a-2);
+    background-color: var(--neutral-a-2);
     outline: none;
     box-sizing: border-box;
-    transition: background var(--transition-fast), border-color var(--transition-fast);
+    transition: background-color var(--transition-fast), border-color var(--transition-fast);
   }
 
   .property-control select:hover,
@@ -285,7 +285,7 @@
   .property-control select:focus,
   .property-control input[type="text"]:focus,
   .swap-search-input:focus {
-    background: var(--neutral-0);
+    background-color: var(--neutral-0);
     border-color: var(--brand-9);
   }
 
@@ -421,8 +421,16 @@
     transition: transform var(--transition-fast);
   }
 
+  .toggle:hover .toggle-slider {
+    background: var(--neutral-a-6);
+  }
+
   .toggle input:checked + .toggle-slider {
     background: var(--brand-9);
+  }
+
+  .toggle:hover input:checked + .toggle-slider {
+    background: var(--brand-10);
   }
 
   .toggle input:checked + .toggle-slider::before {
