@@ -111,6 +111,35 @@ function getVariantProperties(instance: InstanceNode): VariantProperty[] {
   return props;
 }
 
+// Collect property names in the order they appear in the node tree (top-down)
+// This matches Pixso's display order in the properties panel
+function getPropertyOrderFromTree(node: SceneNode): string[] {
+  const ordered: string[] = [];
+  const seen = new Set<string>();
+
+  function walk(n: SceneNode) {
+    if ("componentPropertyReferences" in n && (n as any).componentPropertyReferences) {
+      const refs = (n as any).componentPropertyReferences as { [key: string]: string };
+      // visible (boolean) comes before mainComponent (swap) and characters (text)
+      for (const refProp of ["visible", "characters", "mainComponent"]) {
+        const propName = refs[refProp];
+        if (propName && !seen.has(propName)) {
+          seen.add(propName);
+          ordered.push(propName);
+        }
+      }
+    }
+    if (hasChildren(n)) {
+      for (const child of n.children) {
+        walk(child);
+      }
+    }
+  }
+
+  walk(node);
+  return ordered;
+}
+
 function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[] {
   const props: ComponentPropertyInfo[] = [];
 
@@ -129,12 +158,32 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
     definitions = mainComponent.componentPropertyDefinitions;
   }
 
-  // Iterate in definitions order to preserve the designer's property order
+  // Get property order from the node tree (matches Pixso's display order)
+  const treeOrder = getPropertyOrderFromTree(instance);
+
+  // Start with tree-ordered properties, then append any remaining from definitions
   const defKeys = definitions ? Object.keys(definitions) : [];
+  const orderedKeys: string[] = [];
+  const added = new Set<string>();
+
+  for (const propName of treeOrder) {
+    if (definitions?.[propName] && compProps[propName]) {
+      orderedKeys.push(propName);
+      added.add(propName);
+    }
+  }
+  // Append remaining (variant properties and any not found in tree)
   for (const propName of defKeys) {
+    if (!added.has(propName) && compProps[propName]) {
+      orderedKeys.push(propName);
+    }
+  }
+
+  for (const propName of orderedKeys) {
     const propValue = compProps[propName];
-    if (!propValue) continue; // definition exists but no value on this instance
+    if (!propValue) continue;
     const def = definitions![propName];
+    if (!def) continue;
     const info: ComponentPropertyInfo = {
       name: propName,
       type: propValue.type,
