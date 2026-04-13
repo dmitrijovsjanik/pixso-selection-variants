@@ -284,6 +284,19 @@
     appearance: auto;
   }
 
+  .instance-swap-value {
+    display: block;
+    padding: 4px 8px;
+    font-size: 12px;
+    color: var(--neutral-9);
+    background: var(--neutral-a-2);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-style: italic;
+  }
+
   /* ─── Toggle/Switch (fast.ui.kit Switcher: 24x14 small) ─── */
   .toggle {
     display: inline-flex;
@@ -780,6 +793,17 @@
               <input type="checkbox" class="prop-toggle" data-type="${evtType}" ${dataAttr} ${checked ? 'checked' : ''} />
               <span class="toggle-slider"></span>
             </label>
+          </div>
+        </div>`;
+    }
+
+    if (prop.type === 'INSTANCE_SWAP') {
+      const displayName = prop.currentValueName || String(prop.currentValue);
+      return `
+        <div class="property-row">
+          <span class="property-label" title="${escAttr(prop.name)}">${escHtml(clean)}</span>
+          <div class="property-control">
+            <span class="instance-swap-value" title="${escAttr(displayName)}">${escHtml(displayName)}</span>
           </div>
         </div>`;
     }

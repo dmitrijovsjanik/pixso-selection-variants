@@ -15,6 +15,7 @@ interface ComponentPropertyInfo {
   name: string;
   type: string; // "BOOLEAN" | "TEXT" | "INSTANCE_SWAP" | "VARIANT"
   currentValue: string | boolean;
+  currentValueName?: string; // resolved name for INSTANCE_SWAP
   defaultValue?: string | boolean;
   preferredValues?: string[];
   options?: string[]; // for VARIANT type
@@ -133,6 +134,16 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
 
     if (propValue.type === "VARIANT" && def) {
       info.options = (def as any).variantOptions ?? [];
+    }
+
+    if (propValue.type === "INSTANCE_SWAP" && typeof propValue.value === "string") {
+      // Resolve component ID to name
+      const swapNode = pixso.getNodeById(propValue.value);
+      if (swapNode) {
+        info.currentValueName = swapNode.name;
+      } else {
+        info.currentValueName = String(propValue.value);
+      }
     }
 
     if (def && "preferredValues" in def) {
