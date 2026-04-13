@@ -259,15 +259,18 @@
   .property-control select,
   .property-control input[type="text"] {
     width: 100%;
+    height: 28px;
     padding: 4px 8px;
     border: 1px solid transparent;
-    border-radius: var(--radius-lg);
+    border-radius: min(var(--radius-xl), 14px);
     font-size: 12px;
+    line-height: 20px;
     font-family: inherit;
     color: var(--neutral-12);
     background: var(--neutral-a-2);
     outline: none;
-    transition: all var(--transition-fast);
+    box-sizing: border-box;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
   }
 
   .property-control select:hover,
@@ -283,7 +286,14 @@
 
   .property-control select {
     cursor: pointer;
-    appearance: auto;
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 28px;
+    background-image: url("data:image/svg+xml,%3Csvg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238c8c8c' stroke-width='2.5' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 12px;
+    text-overflow: ellipsis;
   }
 
   .instance-swap-value {
