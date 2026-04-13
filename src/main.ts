@@ -1224,92 +1224,54 @@ pixso.ui.on("message", (msg: any) => {
     const shouldShowQuickSwap = prefKeys.length > 0 && currentKeyInPreferred;
 
     if (shouldShowQuickSwap) {
-      // Show quick swap list
+      // Show quick swap list — search ONLY via library API (no full document scan)
       const values: { id: string; name: string; thumbnailDataUrl: string }[] = [];
       const keySet = new Set(prefKeys);
-      const foundKeys = new Set<string>();
 
-      // Find locally
-      function findByKey(node: BaseNode) {
-        if (foundKeys.size === keySet.size) return;
-        if ("type" in node) {
-          if (node.type === "COMPONENT" && "key" in node) {
-            const comp = node as ComponentNode;
-            if (keySet.has(comp.key)) {
-              const displayName = comp.parent?.type === "COMPONENT_SET"
-                ? comp.parent.name + " / " + comp.name : comp.name;
-              values.push({ id: comp.id, name: displayName, thumbnailDataUrl: "" });
-              foundKeys.add(comp.key);
-            }
-          }
-          if ("children" in node) {
-            for (const c of (node as any).children) findByKey(c);
-          }
-        }
-      }
-      for (const page of pixso.root.children) {
-        findByKey(page);
-        if (foundKeys.size === keySet.size) break;
-      }
+      // Send empty first to stop loading state
+      pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [] });
 
-      // Send local results
-      pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [...values] });
-
-      // Search libraries for missing
-      if (foundKeys.size < keySet.size) {
-        const missingKeys = new Set(prefKeys.filter(k => !foundKeys.has(k)));
-        pixso.getLibraryListAsync().then(async (libraries) => {
-          for (const lib of libraries) {
-            if (!lib.subscribed || missingKeys.size === 0) continue;
-            try {
-              const assets = await pixso.getLibraryByKeyAsync(lib.key);
-              for (const comp of assets.componentList) {
-                if (comp.type === "COMPONENT_SET") {
-                  if (missingKeys.has(comp.key)) {
-                    const first = comp.variants[0];
-                    values.push({ id: first?.key || comp.key, name: comp.name, thumbnailDataUrl: comp.thumbnailUrl || "" });
-                    missingKeys.delete(comp.key);
-                  }
-                  for (const v of comp.variants) {
-                    if (missingKeys.has(v.key)) {
-                      values.push({ id: v.key, name: comp.name + " / " + v.name, thumbnailDataUrl: v.thumbnailUrl || "" });
-                      missingKeys.delete(v.key);
-                    }
-                  }
-                } else if (missingKeys.has(comp.key)) {
-                  values.push({ id: comp.key, name: comp.name, thumbnailDataUrl: comp.thumbnailUrl || "" });
-                  missingKeys.delete(comp.key);
-                }
-                if (missingKeys.size === 0) break;
-              }
-            } catch {}
-          }
-          pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [...values] });
-        });
-      }
-
-      // Lazy-load thumbnails for local values
-      const localIds = values.filter(v => !v.thumbnailDataUrl).map(v => v.id);
-      if (localIds.length > 0) {
-        Promise.all(localIds.map(async (id) => {
+      // Search all subscribed libraries for preferred keys
+      pixso.getLibraryListAsync().then(async (libraries) => {
+        for (const lib of libraries) {
+          if (!lib.subscribed || keySet.size === 0) continue;
           try {
-            const node = pixso.getNodeById(id);
-            if (node && "exportAsync" in node) {
-              const bytes = await (node as any).exportAsync({
-                format: "PNG", constraint: { type: "HEIGHT", value: 32 },
-              } as ExportSettingsImage);
-              return { id, dataUrl: `data:image/png;base64,${pixso.base64Encode(bytes)}` };
+            const assets = await pixso.getLibraryByKeyAsync(lib.key);
+            for (const comp of assets.componentList) {
+              if (comp.type === "COMPONENT_SET") {
+                if (keySet.has(comp.key)) {
+                  const first = comp.variants[0];
+                  values.push({ id: first?.key || comp.key, name: comp.name, thumbnailDataUrl: comp.thumbnailUrl || "" });
+                  keySet.delete(comp.key);
+                }
+                for (const v of comp.variants) {
+                  if (keySet.has(v.key)) {
+                    values.push({ id: v.key, name: comp.name + " / " + v.name, thumbnailDataUrl: v.thumbnailUrl || "" });
+                    keySet.delete(v.key);
+                  }
+                }
+              } else if (keySet.has(comp.key)) {
+                values.push({ id: comp.key, name: comp.name, thumbnailDataUrl: comp.thumbnailUrl || "" });
+                keySet.delete(comp.key);
+              }
+              if (keySet.size === 0) break;
             }
           } catch {}
-          return null;
-        })).then((results) => {
-          const updated = values.map(v => {
-            const thumb = results.find(r => r && r.id === v.id);
-            return thumb ? { ...v, thumbnailDataUrl: thumb.dataUrl } : v;
-          });
-          pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: updated });
-        });
-      }
+          // Send partial results
+          if (values.length > 0) {
+            pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [...values] });
+          }
+        }
+        // Also try getNodeById for any remaining keys (local components)
+        for (const key of keySet) {
+          // key might be a node ID for local components
+          const node = pixso.getNodeById(key);
+          if (node && node.type === "COMPONENT") {
+            values.push({ id: node.id, name: node.name, thumbnailDataUrl: "" });
+          }
+        }
+        pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [...values] });
+      });
     } else {
       // Navigate to current component's location
       if (currentComp) {
