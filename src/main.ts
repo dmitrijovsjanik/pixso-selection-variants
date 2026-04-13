@@ -1228,9 +1228,15 @@ pixso.ui.on("message", (msg: any) => {
       const values: { id: string; name: string; thumbnailDataUrl: string }[] = [];
       const keySet = new Set(prefKeys);
 
-      // Get library info from currentComp directly
+      // Strategy 1: Search libraries (skip current file)
+      // Strategy 2: For current file components, search locally in chunks
+      const fileKey = pixso.fileKey;
+
       currentComp!.getLibraryInfoAsync().then(async (libInfo) => {
-        if (libInfo && libInfo.key) {
+        const isCurrentFile = libInfo && fileKey && libInfo.key === fileKey;
+
+        // Search non-current libraries
+        if (libInfo && libInfo.key && !isCurrentFile) {
           try {
             const assets = await pixso.getLibraryByKeyAsync(libInfo.key);
             for (const comp of assets.componentList) {
@@ -1254,12 +1260,13 @@ pixso.ui.on("message", (msg: any) => {
           } catch {}
         }
 
-        // For remaining keys, try other subscribed libraries
+        // Search remaining keys in other libraries
         if (keySet.size > 0) {
           try {
             const libraries = await pixso.getLibraryListAsync();
             for (const lib of libraries) {
               if (!lib.subscribed || keySet.size === 0) continue;
+              if (fileKey && lib.key === fileKey) continue; // skip current file
               if (libInfo && lib.key === libInfo.key) continue; // already searched
               try {
                 const assets = await pixso.getLibraryByKeyAsync(lib.key);
@@ -1282,10 +1289,53 @@ pixso.ui.on("message", (msg: any) => {
           } catch {}
         }
 
-        console.log("[Swap] Quick swap resolved:", values.length, "of", prefKeys.length);
-        pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values });
+        // For keys still missing (current file components) — search locally in chunks
+        if (keySet.size > 0) {
+          const pages = pixso.root.children;
+          let pageIdx = 0;
+
+          function searchNextPage() {
+            if (pageIdx >= pages.length || keySet.size === 0) {
+              console.log("[Swap] Quick swap resolved:", values.length, "of", prefKeys.length);
+              pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values });
+              return;
+            }
+            const page = pages[pageIdx++];
+            // Search one page at a time with setTimeout to avoid blocking
+            const stack: BaseNode[] = [page];
+            let count = 0;
+            while (stack.length > 0 && keySet.size > 0) {
+              const node = stack.pop()!;
+              count++;
+              if ("type" in node && node.type === "COMPONENT" && "key" in node) {
+                const comp = node as ComponentNode;
+                if (keySet.has(comp.key)) {
+                  const displayName = comp.parent?.type === "COMPONENT_SET"
+                    ? comp.parent.name + " / " + comp.name : comp.name;
+                  values.push({ id: comp.id, name: displayName, thumbnailDataUrl: "" });
+                  keySet.delete(comp.key);
+                }
+              }
+              if ("children" in node && (node as any).type !== "INSTANCE") {
+                for (const c of (node as any).children) stack.push(c);
+              }
+              // Yield every 500 nodes
+              if (count % 500 === 0 && keySet.size > 0) {
+                // Send partial results
+                if (values.length > 0) {
+                  pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [...values] });
+                }
+              }
+            }
+            // Next page via setTimeout (non-blocking)
+            setTimeout(searchNextPage, 0);
+          }
+          searchNextPage();
+        } else {
+          console.log("[Swap] Quick swap resolved:", values.length, "of", prefKeys.length);
+          pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values });
+        }
       }).catch(() => {
-        // getLibraryInfoAsync failed — send empty
         console.log("[Swap] getLibraryInfoAsync failed, sending empty");
         pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [] });
       });
