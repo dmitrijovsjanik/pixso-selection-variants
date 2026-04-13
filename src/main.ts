@@ -1051,59 +1051,73 @@ pixso.ui.on("message", (msg: any) => {
     const { propertyName } = msg;
     const values: { id: string; name: string; thumbnailDataUrl: string }[] = [];
 
-    // Strategy 1: Find the current swap value node and get siblings from its ComponentSet
     const sel = pixso.currentPage.selection;
     if (sel && sel.length > 0) {
+      // Walk all selected nodes and their children to find the instance with this swap property
       const stack: SceneNode[] = [...sel];
-      let found = false;
 
-      while (stack.length > 0 && !found) {
+      while (stack.length > 0 && values.length === 0) {
         const node = stack.pop()!;
-        if (isInstanceNode(node)) {
-          const compProps = node.componentProperties;
-          if (compProps && compProps[propertyName] && compProps[propertyName].type === "INSTANCE_SWAP") {
-            const currentValueId = compProps[propertyName].value as string;
-            const currentNode = pixso.getNodeById(currentValueId);
 
-            if (currentNode && currentNode.parent && currentNode.parent.type === "COMPONENT_SET") {
-              // Get all siblings from the same ComponentSet
-              const componentSet = currentNode.parent as ComponentSetNode;
-              for (const child of componentSet.children) {
-                if (isComponentNode(child)) {
-                  values.push({ id: child.id, name: child.name, thumbnailDataUrl: "" });
+        if (isInstanceNode(node)) {
+          // Check componentPropertyReferences on direct children
+          // The child whose mainComponent ref matches propertyName is the swap target
+          if (hasChildren(node)) {
+            for (const child of node.children) {
+              if ("componentPropertyReferences" in child) {
+                const refs = (child as any).componentPropertyReferences;
+                if (refs && refs.mainComponent === propertyName) {
+                  // This child is controlled by the swap property
+                  // If it's an instance, get siblings from its mainComponent's ComponentSet
+                  if (isInstanceNode(child)) {
+                    const mc = child.mainComponent;
+                    if (mc) {
+                      const parent = mc.parent;
+                      if (parent && parent.type === "COMPONENT_SET") {
+                        for (const sibling of (parent as ComponentSetNode).children) {
+                          if (isComponentNode(sibling)) {
+                            values.push({ id: sibling.id, name: sibling.name, thumbnailDataUrl: "" });
+                          }
+                        }
+                      } else {
+                        // Not in a set — just show the component itself
+                        values.push({ id: mc.id, name: mc.name, thumbnailDataUrl: "" });
+                      }
+                    }
+                  }
+                  break;
                 }
               }
-              found = true;
             }
           }
 
-          // Also check children for nested instances
-          if (!found && hasChildren(node)) {
-            for (const c of node.children) {
-              if (isInstanceNode(c)) {
-                const cProps = c.componentProperties;
-                // Check if this child instance has componentPropertyReferences
-                // pointing to our property name (it controls the swap)
-                if (c.componentPropertyReferences) {
-                  const refs = c.componentPropertyReferences;
-                  if (refs.mainComponent === propertyName) {
-                    const mc = c.mainComponent;
-                    if (mc && mc.parent && mc.parent.type === "COMPONENT_SET") {
-                      const componentSet = mc.parent as ComponentSetNode;
-                      for (const sibling of componentSet.children) {
-                        if (isComponentNode(sibling)) {
-                          values.push({ id: sibling.id, name: sibling.name, thumbnailDataUrl: "" });
-                        }
-                      }
-                      found = true;
+          // Fallback: check componentProperties directly
+          if (values.length === 0) {
+            const compProps = node.componentProperties;
+            if (compProps && compProps[propertyName] && compProps[propertyName].type === "INSTANCE_SWAP") {
+              const currentValueId = compProps[propertyName].value as string;
+              console.log("[Swap] Property", propertyName, "currentValue:", currentValueId);
+
+              const currentNode = pixso.getNodeById(currentValueId);
+              console.log("[Swap] getNodeById result:", currentNode ? currentNode.type + " " + currentNode.name : "null");
+
+              if (currentNode) {
+                const p = currentNode.parent;
+                if (p && p.type === "COMPONENT_SET") {
+                  for (const sibling of (p as ComponentSetNode).children) {
+                    if (isComponentNode(sibling)) {
+                      values.push({ id: sibling.id, name: sibling.name, thumbnailDataUrl: "" });
                     }
                   }
+                } else if (currentNode.type === "COMPONENT") {
+                  values.push({ id: currentNode.id, name: currentNode.name, thumbnailDataUrl: "" });
                 }
               }
             }
           }
         }
-        if (!found && hasChildren(node)) {
+
+        if (values.length === 0 && hasChildren(node)) {
           for (const c of node.children) stack.push(c);
         }
       }

@@ -1733,12 +1733,12 @@
   function renderPickerQuickSwap() {
     const s = swapPickerState;
 
-    if (!s.preferredValues) {
+    if (s.preferredValues === null) {
       return `<div class="swap-picker-loading"><div class="spinner"></div>Loading quick swap...</div>`;
     }
 
     if (s.preferredValues.length === 0) {
-      return `<div class="swap-picker-empty">No quick swap options available.<br/>Select a library from the dropdown above.</div>`;
+      return `<div class="swap-picker-empty">No quick swap variants found for this property.<br/>Try selecting a library from the dropdown above, or use search.</div>`;
     }
 
     let html = '';
