@@ -444,7 +444,7 @@
   .detail-instance-header {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     padding: 8px 12px;
     cursor: pointer;
     position: sticky;
@@ -454,8 +454,26 @@
     border-bottom: 1px solid var(--neutral-a-2);
   }
 
+  .detail-instance-header .collapse-arrow {
+    cursor: pointer;
+    padding: 4px;
+    margin: -4px 0;
+  }
+
   .detail-instance .properties {
     padding: 0 12px 10px 12px;
+  }
+
+  .detail-instance-body {
+    overflow: hidden;
+  }
+
+  .detail-instance.collapsed .detail-instance-body {
+    display: none;
+  }
+
+  .detail-instance.collapsed .collapse-arrow {
+    transform: rotate(-90deg);
   }
 
   .detail-instance-header:hover .detail-instance-name {
@@ -906,14 +924,15 @@
       if (inst.variantProperties.length === 0 && inst.componentProperties.length === 0) continue;
 
       html += `<div class="detail-instance">`;
-      html += `<div class="detail-instance-header" data-click-instance="${escAttr(inst.id)}">
+      html += `<div class="detail-instance-header" data-instance-toggle data-click-instance="${escAttr(inst.id)}">
+        <span class="collapse-arrow"></span>
         <svg class="detail-instance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
         </svg>
         <span class="detail-instance-name">${escHtml(inst.name)}</span>
       </div>`;
 
-      html += `<div class="properties">`;
+      html += `<div class="detail-instance-body"><div class="properties">`;
       for (const vp of inst.variantProperties) {
         html += renderPropertyControl({
           name: vp.name,
@@ -927,7 +946,7 @@
           html += renderPropertyControl(cp, inst.id, false, null);
         }
       }
-      html += `</div></div>`;
+      html += `</div></div></div>`;
     }
 
     html += `</div>`;
@@ -996,11 +1015,19 @@
 
   // ─── Attach event listeners ───
   function attachEventListeners() {
-    // Collapse/expand
+    // Collapse/expand component groups
     document.querySelectorAll('[data-toggle]').forEach(el => {
       el.addEventListener('click', (e) => {
         if (e.target.closest('.btn-icon') || e.target.closest('.component-actions')) return;
         el.closest('.component-group').classList.toggle('collapsed');
+      });
+    });
+
+    // Collapse/expand detail instances (click on arrow)
+    document.querySelectorAll('[data-instance-toggle] .collapse-arrow').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        el.closest('.detail-instance').classList.toggle('collapsed');
       });
     });
 
