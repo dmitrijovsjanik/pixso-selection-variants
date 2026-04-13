@@ -508,81 +508,59 @@
     font-weight: 600;
   }
 
-  /* ─── Breadcrumb navigation ─── */
-  .breadcrumb-bar {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    padding: 6px 12px;
-    background: var(--neutral-0);
+  /* ─── Parent chain navigation ─── */
+  .parent-chain {
     border-bottom: 1px solid var(--neutral-3);
     position: sticky;
     top: 34px;
     z-index: 6;
-    flex-wrap: wrap;
-    min-height: 36px;
+    background: var(--neutral-0);
   }
 
-  .breadcrumb-back {
+  .parent-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    border-bottom: 1px solid var(--neutral-a-2);
+  }
+
+  .parent-item:last-child {
+    border-bottom: none;
+  }
+
+  .parent-item:hover {
+    background: var(--brand-a-3);
+  }
+
+  .parent-item-icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
-    border: none;
-    background: var(--neutral-a-3);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    color: var(--neutral-11);
     flex-shrink: 0;
-    transition: all var(--transition-fast);
-    margin-right: 4px;
+    color: var(--neutral-9);
   }
 
-  .breadcrumb-back:hover {
-    background: var(--neutral-a-4);
-    color: var(--neutral-12);
-  }
-
-  .breadcrumb-item {
-    display: inline-flex;
-    align-items: center;
+  .parent-item-name {
     font-size: 12px;
     font-weight: 500;
-    color: var(--brand-11);
-    cursor: pointer;
-    padding: 2px 4px;
-    border-radius: var(--radius-sm);
-    transition: all var(--transition-fast);
-    border: none;
-    background: none;
-    font-family: inherit;
-    max-width: 120px;
+    color: var(--neutral-11);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    flex: 1;
   }
 
-  .breadcrumb-item:hover {
-    background: var(--brand-a-3);
+  .parent-item:hover .parent-item-name {
     color: var(--brand-9);
   }
 
-  .breadcrumb-separator {
-    color: var(--neutral-5);
-    font-size: 11px;
-    user-select: none;
+  .parent-item-badge {
+    font-size: 10px;
+    color: var(--neutral-9);
     flex-shrink: 0;
-  }
-
-  .breadcrumb-current {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--neutral-12);
-    max-width: 140px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 </style>
 </head>
@@ -600,8 +578,7 @@
   // ─── State ───
   let currentData = null;
   let detailViewComponent = null; // null = bulk list, string = component name for detail view
-  let breadcrumbs = [];  // [{label, index}]
-  let currentLabel = '';
+  let parentChain = [];  // [{id, name}] — nearest parent first
 
   // ─── Tab switching ───
   document.querySelectorAll('.tab').forEach(tab => {
@@ -656,21 +633,26 @@
     return { on: prop.options.find(o => o.toLowerCase() === 'yes'), off: prop.options.find(o => o.toLowerCase() === 'no') };
   }
 
-  // ─── Render breadcrumb navigation ───
-  function renderBreadcrumbs() {
-    if (breadcrumbs.length === 0) return '';
+  // ─── Render parent instance chain (go-up navigation) ───
+  function renderParentChain() {
+    if (parentChain.length === 0) return '';
 
-    let html = `<div class="breadcrumb-bar">`;
-    html += `<button class="breadcrumb-back" data-navigate-back title="Back">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
-    </button>`;
+    let html = `<div class="parent-chain">`;
 
-    for (const crumb of breadcrumbs) {
-      html += `<button class="breadcrumb-item" data-navigate-to="${crumb.index}" title="${escAttr(crumb.label)}">${escHtml(crumb.label)}</button>`;
-      html += `<span class="breadcrumb-separator">/</span>`;
+    // Show parents in reverse order: root at top, nearest parent at bottom
+    const reversed = [...parentChain].reverse();
+    for (let i = 0; i < reversed.length; i++) {
+      const parent = reversed[i];
+      const depth = i;
+      html += `<div class="parent-item" data-select-parent="${escAttr(parent.id)}" style="padding-left: ${12 + depth * 12}px">
+        <span class="parent-item-icon">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+        </span>
+        <span class="parent-item-name">${escHtml(parent.name)}</span>
+        <span class="parent-item-badge">parent</span>
+      </div>`;
     }
 
-    html += `<span class="breadcrumb-current" title="${escAttr(currentLabel)}">${escHtml(currentLabel)}</span>`;
     html += `</div>`;
     return html;
   }
@@ -831,7 +813,7 @@
     }
 
     // ─── Bulk list view (main) ───
-    let html = renderBreadcrumbs();
+    let html = renderParentChain();
     html += `<div class="summary-bar"><strong>${data.instances.length}</strong> instance${data.instances.length > 1 ? 's' : ''} from <strong>${names.length}</strong> component${names.length > 1 ? 's' : ''}</div>`;
 
     for (const compName of names) {
@@ -959,7 +941,7 @@
       return;
     }
 
-    let html = renderBreadcrumbs();
+    let html = renderParentChain();
     html += `<div class="summary-bar"><strong>${data.instances.length}</strong> instance${data.instances.length > 1 ? 's' : ''} from <strong>${names.length}</strong> component${names.length > 1 ? 's' : ''}</div>`;
 
     for (const compName of names) {
@@ -1011,19 +993,11 @@
       });
     });
 
-    // Breadcrumb: back one level
-    document.querySelectorAll('[data-navigate-back]').forEach(el => {
+    // Navigate up to parent instance
+    document.querySelectorAll('[data-select-parent]').forEach(el => {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
-        postMsg({ type: 'navigate-back' });
-      });
-    });
-
-    // Breadcrumb: jump to specific level
-    document.querySelectorAll('[data-navigate-to]').forEach(el => {
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        postMsg({ type: 'navigate-to-level', index: parseInt(el.dataset.navigateTo) });
+        postMsg({ type: 'select-parent-instance', nodeId: el.dataset.selectParent });
       });
     });
 
@@ -1130,8 +1104,7 @@
 
     if (msg.type === 'selection-data') {
       currentData = msg.data;
-      breadcrumbs = msg.breadcrumbs || [];
-      currentLabel = msg.currentLabel || '';
+      parentChain = msg.parentChain || [];
       renderVariantsTab(currentData);
       renderInstancesTab(currentData);
     }

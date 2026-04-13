@@ -281,62 +281,50 @@ console.log("[Selection Variants] Plugin starting...");
 pixso.showUI(__html__, { width: 360, height: 520 });
 console.log("[Selection Variants] UI shown");
 
-// Selection history stack for hierarchical back navigation
-interface SelectionHistoryEntry {
-  ids: string[];
-  label: string; // display name for breadcrumb
-}
-let selectionStack: SelectionHistoryEntry[] = [];
-let programmaticChangeUntil = 0; // timestamp — ignore selectionchange until this time
+// ─── Parent instance chain for "go up" navigation ───
 
-function getSelectionLabel(): string {
-  const sel = pixso.currentPage.selection;
-  if (!sel || sel.length === 0) return "";
-  if (sel.length === 1) return sel[0].name;
-  return `${sel.length} objects`;
+interface ParentInstanceInfo {
+  id: string;
+  name: string;
 }
 
-function pushSelection() {
+// Walk up the node tree from the current selection, collecting parent instances
+function getParentInstanceChain(): ParentInstanceInfo[] {
   const sel = pixso.currentPage.selection;
-  if (sel && sel.length > 0) {
-    selectionStack.push({
-      ids: sel.map((n) => n.id),
-      label: getSelectionLabel(),
-    });
+  if (!sel || sel.length === 0) return [];
+
+  // Use the first selected node to walk up
+  let current: BaseNode | null = sel[0].parent;
+  const chain: ParentInstanceInfo[] = [];
+
+  while (current && current.type !== "PAGE" && current.type !== "DOCUMENT") {
+    if (current.type === "INSTANCE") {
+      chain.push({
+        id: current.id,
+        name: (current as InstanceNode).name,
+      });
+    }
+    current = current.parent;
   }
+
+  return chain; // nearest parent first, root last
 }
 
 // Send initial data
 function sendSelectionData() {
   const data = analyzeSelection();
-  // Build breadcrumb trail from stack
-  const breadcrumbs = selectionStack.map((entry, index) => ({
-    label: entry.label,
-    index,
-  }));
+  const parentChain = getParentInstanceChain();
   pixso.ui.postMessage({
     type: "selection-data",
     data,
-    breadcrumbs,
-    currentLabel: getSelectionLabel(),
+    parentChain,
   });
 }
 
 sendSelectionData();
 
-function markProgrammaticChange() {
-  programmaticChangeUntil = Date.now() + 500; // ignore for 500ms
-}
-
 // Listen for selection changes
 pixso.on("selectionchange", () => {
-  if (Date.now() < programmaticChangeUntil) {
-    // This was triggered by our own code — keep the stack
-    sendSelectionData();
-    return;
-  }
-  // User changed selection manually — clear history stack
-  selectionStack = [];
   sendSelectionData();
 });
 
@@ -410,18 +398,14 @@ pixso.ui.on("message", (msg: any) => {
   }
 
   if (msg.type === "select-instance") {
-    // Select a specific instance in the canvas
     const { instanceId } = msg;
     const node = pixso.getNodeById(instanceId);
     if (node && "type" in node) {
-      pushSelection();
-      markProgrammaticChange();
       pixso.currentPage.selection = [node as SceneNode];
     }
   }
 
   if (msg.type === "select-instances-by-component") {
-    // Select all instances of a specific component
     const { componentName } = msg;
     const data = analyzeSelection();
     const targetInstances = data.groupedByComponent[componentName] ?? [];
@@ -433,48 +417,16 @@ pixso.ui.on("message", (msg: any) => {
       }
     }
     if (nodes.length > 0) {
-      pushSelection();
-      markProgrammaticChange();
       pixso.currentPage.selection = nodes;
     }
   }
 
-  if (msg.type === "navigate-back") {
-    // Go back one level
-    if (selectionStack.length > 0) {
-      const entry = selectionStack.pop()!;
-      const nodes: SceneNode[] = [];
-      for (const id of entry.ids) {
-        const node = pixso.getNodeById(id);
-        if (node && "type" in node) {
-          nodes.push(node as SceneNode);
-        }
-      }
-      if (nodes.length > 0) {
-        markProgrammaticChange();
-        pixso.currentPage.selection = nodes;
-      }
-    }
-  }
-
-  if (msg.type === "navigate-to-level") {
-    // Jump to a specific level in the breadcrumb
-    const { index } = msg;
-    if (index >= 0 && index < selectionStack.length) {
-      const entry = selectionStack[index];
-      // Truncate stack to that level
-      selectionStack = selectionStack.slice(0, index);
-      const nodes: SceneNode[] = [];
-      for (const id of entry.ids) {
-        const node = pixso.getNodeById(id);
-        if (node && "type" in node) {
-          nodes.push(node as SceneNode);
-        }
-      }
-      if (nodes.length > 0) {
-        markProgrammaticChange();
-        pixso.currentPage.selection = nodes;
-      }
+  if (msg.type === "select-parent-instance") {
+    // Navigate up to a parent instance by id
+    const { nodeId } = msg;
+    const node = pixso.getNodeById(nodeId);
+    if (node && "type" in node) {
+      pixso.currentPage.selection = [node as SceneNode];
     }
   }
 
