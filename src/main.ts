@@ -1184,9 +1184,9 @@ pixso.ui.on("message", (msg: any) => {
 
       console.log("[Swap] Found locally:", foundKeys.size, "of", keySet.size);
     } else {
-      // No preferred values — find the current swap component and show its container siblings
+      // No preferred values — find the current component's location
+      // so UI can auto-navigate to its folder in the picker
       if (sel && sel.length > 0) {
-        // Find the child controlled by this swap property
         let swapComp: ComponentNode | null = null;
         const findStack: SceneNode[] = [...sel];
         while (findStack.length > 0 && !swapComp) {
@@ -1208,51 +1208,38 @@ pixso.ui.on("message", (msg: any) => {
         }
 
         if (swapComp) {
-          // Strategy A: ComponentSet siblings
-          const csParent = swapComp.parent;
-          if (csParent && csParent.type === "COMPONENT_SET") {
-            for (const sibling of (csParent as ComponentSetNode).children) {
-              if (isComponentNode(sibling)) {
-                values.push({ id: sibling.id, name: sibling.name, thumbnailDataUrl: "" });
+          // Determine source and container
+          let sourceKey = "__local__";
+          let containerName = "";
+
+          if (swapComp.remote) {
+            // Remote component — get library info
+            containerName = (swapComp as any).containerName || (swapComp as any).pageName || "";
+            // We'll send the info, UI will match against sources
+          } else {
+            // Local component — find container frame name
+            let p: BaseNode | null = swapComp.parent;
+            if (p && p.type === "COMPONENT_SET") p = p.parent;
+            // Walk up to find a named frame
+            while (p && p.type !== "PAGE") {
+              if (p.type === "FRAME" || p.type === "SECTION") {
+                containerName = p.name;
+                break;
               }
+              p = p.parent;
             }
           }
 
-          // Strategy B: If no ComponentSet, find components in the same container (folder/frame)
-          if (values.length <= 1) {
-            values.length = 0; // reset
-            // Walk up to find the container frame
-            let container: BaseNode | null = csParent || swapComp.parent;
-            // Go up until we find a frame that's not a ComponentSet
-            while (container && (container.type === "COMPONENT_SET" || container.type === "COMPONENT")) {
-              container = container.parent;
-            }
-            if (container && "children" in container) {
-              // Collect all components in this container
-              function collectFromContainer(node: BaseNode) {
-                if (values.length >= 30) return;
-                if ("type" in node) {
-                  if (node.type === "COMPONENT_SET" && "children" in node) {
-                    // Add as a single entry with the set name
-                    const firstChild = (node as any).children[0];
-                    if (firstChild && firstChild.type === "COMPONENT") {
-                      values.push({ id: firstChild.id, name: node.name, thumbnailDataUrl: "" });
-                    }
-                  } else if (node.type === "COMPONENT") {
-                    const p = node.parent;
-                    if (!p || p.type !== "COMPONENT_SET") {
-                      values.push({ id: node.id, name: node.name, thumbnailDataUrl: "" });
-                    }
-                  } else if ("children" in node && node.type !== "INSTANCE") {
-                    for (const c of (node as any).children) {
-                      collectFromContainer(c);
-                    }
-                  }
-                }
-              }
-              collectFromContainer(container);
-            }
-          }
+          console.log("[Swap] Current component location: source=", sourceKey, "container=", containerName);
+
+          // Send location info so UI can auto-navigate
+          pixso.ui.postMessage({
+            type: "preferred-swap-values",
+            propertyName,
+            values: [],
+            navigateTo: { sourceKey, containerName },
+          });
+          return;
         }
       }
     }

@@ -2108,7 +2108,35 @@
     if (msg.type === 'preferred-swap-values') {
       if (swapPickerState && swapPickerState.propertyName === msg.propertyName) {
         swapPickerState.preferredValues = msg.values;
-        if (swapPickerState.level === 'quickswap') {
+
+        // If navigateTo is provided and values are empty — auto-navigate to component's folder
+        if (msg.navigateTo && msg.values.length === 0 && swapPickerState.level === 'quickswap') {
+          const nav = msg.navigateTo;
+          const sourceKey = nav.sourceKey || '__local__';
+          swapPickerState.selectedSource = sourceKey;
+          swapPickerState.level = 'folders';
+          swapPickerState.navigateToFolder = nav.containerName || null;
+
+          // Update dropdown
+          const selectEl = document.getElementById('swap-source-select');
+          if (selectEl) selectEl.value = sourceKey;
+
+          // Load data
+          if (!swapPickerState.libraryCache[sourceKey]) {
+            if (sourceKey === '__local__') {
+              postMsg({ type: 'get-local-components' });
+            } else {
+              postMsg({ type: 'get-library-contents', libraryKey: sourceKey });
+            }
+          } else {
+            // Data already cached — auto-navigate to folder
+            if (nav.containerName) {
+              swapPickerState.level = 'components';
+              swapPickerState.currentFolder = nav.containerName;
+            }
+            renderSwapPickerBody();
+          }
+        } else if (swapPickerState.level === 'quickswap') {
           renderSwapPickerBody();
         }
       }
@@ -2117,6 +2145,16 @@
     if (msg.type === 'library-contents') {
       if (swapPickerState) {
         swapPickerState.libraryCache[msg.libraryKey] = { folders: msg.folders };
+        // Auto-navigate to folder if requested
+        if (swapPickerState.navigateToFolder && swapPickerState.level === 'folders') {
+          const targetFolder = swapPickerState.navigateToFolder;
+          const hasFolder = msg.folders.some(f => f.name === targetFolder);
+          if (hasFolder) {
+            swapPickerState.level = 'components';
+            swapPickerState.currentFolder = targetFolder;
+            swapPickerState.navigateToFolder = null;
+          }
+        }
         renderSwapPickerBody();
       }
     }
@@ -2124,6 +2162,16 @@
     if (msg.type === 'local-contents') {
       if (swapPickerState) {
         swapPickerState.libraryCache['__local__'] = { folders: msg.folders };
+        // Auto-navigate to folder if requested
+        if (swapPickerState.navigateToFolder && swapPickerState.level === 'folders') {
+          const targetFolder = swapPickerState.navigateToFolder;
+          const hasFolder = msg.folders.some(f => f.name === targetFolder);
+          if (hasFolder) {
+            swapPickerState.level = 'components';
+            swapPickerState.currentFolder = targetFolder;
+            swapPickerState.navigateToFolder = null;
+          }
+        }
         renderSwapPickerBody();
 
         // Request thumbnails for local components (first 30)
