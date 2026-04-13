@@ -551,6 +551,12 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
+  .go-up-bar.disabled {
+    cursor: default;
+    opacity: 0.35;
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
@@ -624,12 +630,13 @@
 
   // ─── Render "go up" bar ───
   function renderGoUpBar() {
-    if (!parentInfo) return '';
-    return `<div class="go-up-bar" data-go-up>
+    const disabled = !parentInfo;
+    const label = parentInfo ? parentInfo.name : 'No parent';
+    return `<div class="go-up-bar ${disabled ? 'disabled' : ''}" ${disabled ? '' : 'data-go-up'}>
       <span class="go-up-icon">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 15l-6-6-6 6"/></svg>
       </span>
-      <span class="go-up-label">${escHtml(parentInfo.name)}</span>
+      <span class="go-up-label">${escHtml(label)}</span>
     </div>`;
   }
 
