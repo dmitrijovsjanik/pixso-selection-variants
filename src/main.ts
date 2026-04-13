@@ -1188,8 +1188,32 @@ pixso.ui.on("message", (msg: any) => {
       }
     }
 
-    // Step 2: Check if current component is in preferred values
-    const currentComp = findCurrentSwapComp();
+    // Step 2: Find current swap component
+    let currentComp = findCurrentSwapComp();
+
+    // Fallback: try componentProperties value via getNodeById
+    if (!currentComp && sel && sel.length > 0) {
+      for (const node of sel) {
+        if (isInstanceNode(node)) {
+          const cp = node.componentProperties;
+          if (cp && cp[propertyName] && cp[propertyName].type === "INSTANCE_SWAP") {
+            const val = cp[propertyName].value as string;
+            const valNode = pixso.getNodeById(val);
+            if (valNode) {
+              if (valNode.type === "COMPONENT") {
+                currentComp = valNode as ComponentNode;
+              } else if (valNode.type === "INSTANCE") {
+                currentComp = (valNode as InstanceNode).mainComponent;
+              }
+            }
+            break;
+          }
+        }
+      }
+    }
+
+    console.log("[Swap] property:", propertyName, "prefKeys:", prefKeys.length, "currentComp:", currentComp?.name || "null");
+
     let currentKeyInPreferred = false;
     if (currentComp && prefKeys.length > 0) {
       currentKeyInPreferred = prefKeys.includes(currentComp.key);
