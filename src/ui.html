@@ -1781,9 +1781,12 @@
 
     let html = '';
     for (const pv of s.preferredValues) {
-      const thumb = pv.thumbnailDataUrl
-        ? `<img class="swap-thumb" src="${pv.thumbnailDataUrl}" />`
-        : `<div class="swap-thumb-placeholder">${compSvg}</div>`;
+      let thumb;
+      if (pv.thumbnailDataUrl) {
+        thumb = `<img class="swap-thumb" src="${pv.thumbnailDataUrl}" />`;
+      } else {
+        thumb = `<div class="swap-thumb-loading"></div>`;
+      }
       html += `<div class="swap-component-item" data-picker-apply="${escAttr(pv.id)}">
         ${thumb}
         <div class="swap-comp-info"><div class="swap-comp-name">${escHtml(pv.name)}</div></div>
