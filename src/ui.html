@@ -2168,6 +2168,8 @@
         // Auto-navigate to folder if requested
         if (swapPickerState.navigateToFolder && swapPickerState.level === 'folders') {
           const targetFolder = swapPickerState.navigateToFolder;
+          const folderNames = msg.folders.map(f => f.name);
+          console.log("[SwapUI] Looking for folder:", targetFolder, "in:", folderNames);
           const hasFolder = msg.folders.some(f => f.name === targetFolder);
           if (hasFolder) {
             swapPickerState.level = 'components';
