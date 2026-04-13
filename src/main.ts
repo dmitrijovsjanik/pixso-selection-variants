@@ -1120,26 +1120,30 @@ pixso.ui.on("message", (msg: any) => {
   if (msg.type === "get-preferred-swap-values") {
     const { propertyName } = msg;
 
-    // Helper: find the current swap component via componentPropertyReferences
+    // Helper: find the current swap component via componentPropertyReferences (recursive)
     function findCurrentSwapComp(): ComponentNode | null {
       const sel = pixso.currentPage.selection;
       if (!sel || sel.length === 0) return null;
-      const stack: SceneNode[] = [...sel];
-      while (stack.length > 0) {
-        const node = stack.pop()!;
-        if (isInstanceNode(node) && hasChildren(node)) {
-          for (const child of node.children) {
-            if ("componentPropertyReferences" in child) {
-              const refs = (child as any).componentPropertyReferences;
-              if (refs && refs.mainComponent === propertyName && isInstanceNode(child)) {
-                return child.mainComponent;
-              }
-            }
+
+      function searchInNode(node: SceneNode): ComponentNode | null {
+        if ("componentPropertyReferences" in node) {
+          const refs = (node as any).componentPropertyReferences;
+          if (refs && refs.mainComponent === propertyName && isInstanceNode(node)) {
+            return node.mainComponent;
           }
         }
         if (hasChildren(node)) {
-          for (const c of node.children) stack.push(c);
+          for (const child of node.children) {
+            const found = searchInNode(child);
+            if (found) return found;
+          }
         }
+        return null;
+      }
+
+      for (const node of sel) {
+        const found = searchInNode(node);
+        if (found) return found;
       }
       return null;
     }
@@ -1199,7 +1203,7 @@ pixso.ui.on("message", (msg: any) => {
       currentKeyInPreferred = prefKeys.includes(currentComp.key);
     }
 
-    console.log("[Swap] prefKeys:", prefKeys.length, "currentInPref:", currentKeyInPreferred);
+    console.log("[Swap] prefKeys:", prefKeys.length, "currentComp:", currentComp?.name, "key:", currentComp?.key, "inPref:", currentKeyInPreferred);
 
     // Decision: show quick swap OR navigate to current component's location
     const shouldShowQuickSwap = prefKeys.length > 0 && currentKeyInPreferred;
