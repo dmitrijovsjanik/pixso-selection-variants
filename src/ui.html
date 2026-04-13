@@ -585,8 +585,16 @@
 
   .go-up-bar.disabled {
     cursor: default;
-    opacity: 0.35;
     pointer-events: none;
+    background: var(--neutral-1);
+  }
+
+  .go-up-bar.disabled .go-up-icon {
+    color: var(--neutral-5);
+  }
+
+  .go-up-bar.disabled .go-up-label {
+    color: var(--neutral-5);
   }
 
   /* ─── Loading state ─── */
@@ -619,7 +627,7 @@
   <span class="go-up-icon">
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 15l-6-6-6 6"/></svg>
   </span>
-  <span class="go-up-label">Go to parent selection</span>
+  <span class="go-up-label">Top level — no parent</span>
 </div>
 
 <div class="tabs">
@@ -706,7 +714,7 @@
       label.innerHTML = `Go to parent selection: <strong>${escHtml(parentInfo.name)}</strong>`;
     } else {
       bar.classList.add('disabled');
-      label.textContent = 'Go to parent selection';
+      label.textContent = 'Top level — no parent';
     }
   }
 
