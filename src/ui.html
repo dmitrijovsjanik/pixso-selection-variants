@@ -230,10 +230,14 @@
 
   /* Toggle switch for booleans */
   .toggle {
-    position: relative;
+    display: inline-flex;
+    align-items: center;
     width: 32px;
+    min-width: 32px;
     height: 18px;
     cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
   }
 
   .toggle input {
@@ -241,14 +245,18 @@
     width: 0;
     height: 0;
     position: absolute;
+    pointer-events: none;
   }
 
   .toggle-slider {
-    position: absolute;
-    inset: 0;
+    display: block;
+    width: 32px;
+    height: 18px;
     background: #ccc;
     border-radius: 9px;
-    transition: 0.2s;
+    transition: background 0.2s;
+    position: relative;
+    flex-shrink: 0;
   }
 
   .toggle-slider::before {
@@ -257,10 +265,10 @@
     height: 14px;
     width: 14px;
     left: 2px;
-    bottom: 2px;
+    top: 2px;
     background: white;
     border-radius: 50%;
-    transition: 0.2s;
+    transition: transform 0.2s;
   }
 
   .toggle input:checked + .toggle-slider {
