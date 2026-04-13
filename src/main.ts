@@ -56,6 +56,20 @@ function hasChildren(node: SceneNode): node is SceneNode & { children: readonly 
   return "children" in node;
 }
 
+function getComponentDisplayName(instance: InstanceNode): string {
+  const mainComponent = instance.mainComponent;
+  if (!mainComponent) return "Unknown Component";
+
+  // If mainComponent is inside a ComponentSet, use the set's name (master component name)
+  const parent = mainComponent.parent;
+  if (parent && parent.type === "COMPONENT_SET") {
+    return parent.name;
+  }
+
+  // Otherwise use the component's own name
+  return mainComponent.name;
+}
+
 function getNodePath(node: SceneNode): string {
   const parts: string[] = [];
   let current: BaseNode | null = node.parent;
@@ -139,7 +153,7 @@ function collectInstances(
   for (const node of nodes) {
     if (isInstanceNode(node)) {
       const mainComponent = node.mainComponent;
-      const componentName = mainComponent?.name ?? "Unknown Component";
+      const componentName = getComponentDisplayName(node);
       const componentId = mainComponent?.id ?? null;
 
       results.push({
@@ -195,7 +209,7 @@ function analyzeSelection(): SelectionData {
       allInstances.push({
         id: node.id,
         name: node.name,
-        componentName: mainComponent?.name ?? "Unknown Component",
+        componentName: getComponentDisplayName(node),
         componentId: mainComponent?.id ?? null,
         depth: 0,
         variantProperties: getVariantProperties(node),
