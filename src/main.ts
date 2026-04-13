@@ -64,6 +64,17 @@ function hasChildren(node: SceneNode): node is SceneNode & { children: readonly 
   return "children" in node;
 }
 
+function isEffectivelyVisible(node: SceneNode): boolean {
+  let current: BaseNode | null = node;
+  while (current && current.type !== "PAGE" && current.type !== "DOCUMENT") {
+    if ("visible" in current && !(current as SceneNode).visible) {
+      return false;
+    }
+    current = current.parent;
+  }
+  return true;
+}
+
 function getComponentDisplayName(instance: InstanceNode): string {
   const mainComponent = instance.mainComponent;
   if (!mainComponent) return "Unknown Component";
@@ -261,7 +272,7 @@ function analyzeSelectionSync(): SelectionData {
         componentName: getComponentDisplayName(node),
         componentId: mainComponent?.id ?? null,
         depth,
-        visible: node.visible,
+        visible: isEffectivelyVisible(node),
         variantProperties: getVariantProperties(node),
         componentProperties: getComponentProperties(node),
         path: getNodePath(node),
@@ -324,7 +335,7 @@ function analyzeSelectionAsync(onDone: (data: SelectionData) => void) {
           componentName: getComponentDisplayName(node),
           componentId: mainComponent?.id ?? null,
           depth,
-          visible: node.visible,
+          visible: isEffectivelyVisible(node),
           variantProperties: getVariantProperties(node),
           componentProperties: getComponentProperties(node),
           path: getNodePath(node),
