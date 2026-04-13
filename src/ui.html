@@ -1991,7 +1991,7 @@
     if (msg.type === 'preferred-swap-values') {
       if (swapPickerState && swapPickerState.propertyName === msg.propertyName) {
         swapPickerState.preferredValues = msg.values;
-        if (swapPickerState.level === 'sources') {
+        if (swapPickerState.level === 'quickswap') {
           renderSwapPickerBody();
         }
       }
