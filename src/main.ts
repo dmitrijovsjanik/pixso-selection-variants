@@ -1183,6 +1183,48 @@ pixso.ui.on("message", (msg: any) => {
       }
 
       console.log("[Swap] Found locally:", foundKeys.size, "of", keySet.size);
+
+      // Step 3: Search subscribed libraries for missing keys
+      if (foundKeys.size < keySet.size) {
+        // Send local results first
+        pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [...values] });
+
+        const missingKeys = new Set(prefKeys.filter(k => !foundKeys.has(k)));
+        pixso.getLibraryListAsync().then(async (libraries) => {
+          for (const lib of libraries) {
+            if (!lib.subscribed || missingKeys.size === 0) continue;
+            try {
+              const assets = await pixso.getLibraryByKeyAsync(lib.key);
+              for (const comp of assets.componentList) {
+                if (comp.type === "COMPONENT_SET") {
+                  // Check set key and variant keys
+                  if (missingKeys.has(comp.key)) {
+                    const first = comp.variants[0];
+                    values.push({ id: first?.key || comp.key, name: comp.name, thumbnailDataUrl: comp.thumbnailUrl || "" });
+                    missingKeys.delete(comp.key);
+                  }
+                  for (const v of comp.variants) {
+                    if (missingKeys.has(v.key)) {
+                      values.push({ id: v.key, name: comp.name + " / " + v.name, thumbnailDataUrl: v.thumbnailUrl || "" });
+                      missingKeys.delete(v.key);
+                    }
+                  }
+                } else {
+                  if (missingKeys.has(comp.key)) {
+                    values.push({ id: comp.key, name: comp.name, thumbnailDataUrl: comp.thumbnailUrl || "" });
+                    missingKeys.delete(comp.key);
+                  }
+                }
+                if (missingKeys.size === 0) break;
+              }
+            } catch {}
+          }
+          // Send updated results with library components
+          console.log("[Swap] After library search, total:", values.length);
+          pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [...values] });
+        });
+        return; // Don't send again below
+      }
     } else {
       // No preferred values — find the current component's location
       // so UI can auto-navigate to its folder in the picker
