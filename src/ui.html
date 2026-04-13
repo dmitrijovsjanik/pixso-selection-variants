@@ -57,7 +57,7 @@
   /* ─── Tabs (ContentSwitcher style) ─── */
   .tabs {
     display: flex;
-    background: var(--neutral-a-2);
+    background: var(--neutral-3);
     position: sticky;
     top: 35px;
     z-index: 10;
@@ -577,7 +577,7 @@
   <span class="go-up-icon">
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 15l-6-6-6 6"/></svg>
   </span>
-  <span class="go-up-label">Parent Selection</span>
+  <span class="go-up-label">Go to parent selection</span>
 </div>
 
 <div class="tabs">
@@ -658,12 +658,13 @@
   function updateGoUpBar() {
     const bar = document.getElementById('go-up-bar');
     if (!bar) return;
+    const label = bar.querySelector('.go-up-label');
     if (parentInfo) {
       bar.classList.remove('disabled');
-      bar.querySelector('.go-up-label').textContent = parentInfo.name;
+      label.innerHTML = `Go to parent selection: <strong>${escHtml(parentInfo.name)}</strong>`;
     } else {
       bar.classList.add('disabled');
-      bar.querySelector('.go-up-label').textContent = 'Parent Selection';
+      label.textContent = 'Go to parent selection';
     }
   }
 
