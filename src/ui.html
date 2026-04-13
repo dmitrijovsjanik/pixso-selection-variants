@@ -256,13 +256,16 @@
     min-width: 0;
   }
 
+  /* ─── Shared input base (matches fast.ui.kit xs size) ─── */
   .property-control select,
-  .property-control input[type="text"] {
+  .property-control input[type="text"],
+  .instance-swap-value,
+  .swap-search-input {
     width: 100%;
     height: 28px;
     padding: 4px 8px;
     border: 1px solid transparent;
-    border-radius: min(var(--radius-xl), 14px);
+    border-radius: var(--radius-lg);
     font-size: 12px;
     line-height: 20px;
     font-family: inherit;
@@ -274,14 +277,21 @@
   }
 
   .property-control select:hover,
-  .property-control input[type="text"]:hover {
+  .property-control input[type="text"]:hover,
+  .swap-search-input:hover {
     border-color: var(--neutral-9);
   }
 
   .property-control select:focus,
-  .property-control input[type="text"]:focus {
+  .property-control input[type="text"]:focus,
+  .swap-search-input:focus {
     background: var(--neutral-0);
     border-color: var(--brand-9);
+  }
+
+  .property-control input[type="text"]::placeholder,
+  .swap-search-input::placeholder {
+    color: var(--neutral-a-9);
   }
 
   .property-control select {
@@ -297,12 +307,9 @@
   }
 
   .instance-swap-value {
-    display: block;
-    padding: 4px 8px;
-    font-size: 12px;
+    display: flex;
+    align-items: center;
     color: var(--neutral-9);
-    background: var(--neutral-a-2);
-    border-radius: var(--radius-lg);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -310,12 +317,11 @@
 
   .instance-swap-value.clickable {
     cursor: pointer;
-    transition: all var(--transition-fast);
   }
 
   .instance-swap-value.clickable:hover {
-    background: var(--brand-a-3);
-    color: var(--brand-11);
+    border-color: var(--neutral-9);
+    color: var(--neutral-11);
   }
 
   .instance-swap-value.loading {
@@ -329,15 +335,8 @@
   }
 
   .swap-search-input {
-    width: 100%;
-    padding: 4px 8px;
-    border: 1px solid var(--brand-9);
-    border-radius: var(--radius-lg);
-    font-size: 12px;
-    font-family: inherit;
-    color: var(--neutral-12);
+    border-color: var(--brand-9);
     background: var(--neutral-0);
-    outline: none;
   }
 
   .swap-search-results {
