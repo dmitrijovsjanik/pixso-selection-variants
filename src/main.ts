@@ -504,24 +504,37 @@ function resolveSwapNames(data: SelectionData) {
   for (const inst of data.instances) {
     for (const cp of inst.componentProperties) {
       if (cp.type === "INSTANCE_SWAP" && !cp.currentValueName && typeof cp.currentValue === "string") {
-        // Try: the value might be a node ID of an instance's mainComponent
-        // Walk the instance's children to find the matching component reference
+        // Find child whose componentPropertyReferences.mainComponent matches this property
         const instNode = pixso.getNodeById(inst.id) as InstanceNode | null;
         if (instNode && hasChildren(instNode)) {
-          for (const child of instNode.children) {
-            if (isInstanceNode(child)) {
-              const mc = child.mainComponent;
-              if (mc && mc.id === cp.currentValue) {
-                const mcParent = mc.parent;
-                if (mcParent && mcParent.type === "COMPONENT_SET") {
-                  cp.currentValueName = mcParent.name + " / " + mc.name;
-                } else {
-                  cp.currentValueName = mc.name;
+          function findSwapChild(parent: SceneNode): boolean {
+            if (!hasChildren(parent)) return false;
+            for (const child of parent.children) {
+              if ("componentPropertyReferences" in child) {
+                const refs = (child as any).componentPropertyReferences;
+                if (refs && refs.mainComponent === cp.name) {
+                  if (isInstanceNode(child)) {
+                    const mc = child.mainComponent;
+                    if (mc) {
+                      const mcParent = mc.parent;
+                      if (mcParent && mcParent.type === "COMPONENT_SET") {
+                        cp.currentValueName = mcParent.name + " / " + mc.name;
+                      } else {
+                        cp.currentValueName = mc.name;
+                      }
+                      return true;
+                    }
+                  } else if (child.name) {
+                    cp.currentValueName = child.name;
+                    return true;
+                  }
                 }
-                break;
               }
+              if (findSwapChild(child)) return true;
             }
+            return false;
           }
+          findSwapChild(instNode);
         }
       }
     }
