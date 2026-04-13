@@ -1163,6 +1163,32 @@ pixso.ui.on("message", (msg: any) => {
 
     console.log("[Swap Picker] Total quick swap options:", values.length);
     pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values });
+
+    // Lazy-load thumbnails for quick swap values
+    if (values.length > 0) {
+      const thumbIds = values.map(v => v.id);
+      Promise.all(
+        thumbIds.map(async (id) => {
+          try {
+            const node = pixso.getNodeById(id);
+            if (node && "exportAsync" in node) {
+              const bytes = await (node as any).exportAsync({
+                format: "PNG",
+                constraint: { type: "HEIGHT", value: 32 },
+              } as ExportSettingsImage);
+              return { id, dataUrl: `data:image/png;base64,${pixso.base64Encode(bytes)}` };
+            }
+          } catch {}
+          return null;
+        })
+      ).then((results) => {
+        const updated = values.map(v => {
+          const thumb = results.find(r => r && r.id === v.id);
+          return { ...v, thumbnailDataUrl: thumb ? thumb.dataUrl : "" };
+        });
+        pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: updated });
+      });
+    }
   }
 
   if (msg.type === "refresh") {
