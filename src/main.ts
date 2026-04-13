@@ -1049,17 +1049,37 @@ pixso.ui.on("message", (msg: any) => {
 
   if (msg.type === "get-preferred-swap-values") {
     const { propertyName } = msg;
-    const data = analyzeSelectionSync();
 
+    // Get preferred values directly from the component definition
     let keys: string[] = [];
-    for (const inst of data.instances) {
-      for (const cp of inst.componentProperties) {
-        if (cp.name === propertyName && cp.type === "INSTANCE_SWAP" && cp.preferredValues) {
-          keys = cp.preferredValues;
-          break;
+    const sel = pixso.currentPage.selection;
+    if (sel && sel.length > 0) {
+      // Find first instance and get definitions
+      const stack: SceneNode[] = [...sel];
+      while (stack.length > 0 && keys.length === 0) {
+        const node = stack.pop()!;
+        if (isInstanceNode(node)) {
+          const mc = node.mainComponent;
+          if (mc) {
+            let defs: ComponentPropertyDefinitions | null = null;
+            const p = mc.parent;
+            if (p && p.type === "COMPONENT_SET") {
+              defs = (p as ComponentSetNode).componentPropertyDefinitions;
+            } else {
+              defs = mc.componentPropertyDefinitions;
+            }
+            if (defs && defs[propertyName]) {
+              const def = defs[propertyName];
+              if (def.preferredValues) {
+                keys = (def.preferredValues as any[]).map((pv: any) => pv.key);
+              }
+            }
+          }
+        }
+        if (hasChildren(node)) {
+          for (const c of node.children) stack.push(c);
         }
       }
-      if (keys.length > 0) break;
     }
 
     if (keys.length === 0) {

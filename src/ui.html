@@ -1975,7 +1975,16 @@
     if (msg.type === 'swap-sources') {
       if (swapPickerState) {
         swapPickerState.sources = msg.sources;
-        renderSwapPickerBody();
+        // Update the source dropdown
+        const selectEl = document.getElementById('swap-source-select');
+        if (selectEl) {
+          let opts = `<option value="__quickswap__">Quick swap</option>`;
+          for (const src of msg.sources) {
+            opts += `<option value="${escAttr(src.key)}">${escHtml(src.name)}</option>`;
+          }
+          selectEl.innerHTML = opts;
+          selectEl.value = swapPickerState.selectedSource;
+        }
       }
     }
 
