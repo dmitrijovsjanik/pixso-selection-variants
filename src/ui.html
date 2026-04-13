@@ -1160,7 +1160,9 @@
     if (!msg) return;
 
     if (msg.type === 'loading') {
-      const loadingHtml = `<div class="loading-state"><div class="spinner"></div>Loading...</div>`;
+      const count = msg.layerCount || 0;
+      const detail = count > 0 ? `Scanning ${count} layers...` : 'Loading...';
+      const loadingHtml = `<div class="loading-state"><div class="spinner"></div>${escHtml(detail)}</div>`;
       document.getElementById('variants-tab').innerHTML = loadingHtml;
       document.getElementById('instances-tab').innerHTML = loadingHtml;
     }

@@ -292,7 +292,19 @@ function getParentInfo(): { id: string; name: string } | null {
   return { id: parent.id, name: parent.name };
 }
 
-// Send initial data
+// Quick count of total child nodes (fast, no property reading)
+function quickCountNodes(nodes: readonly SceneNode[]): number {
+  let count = 0;
+  for (const node of nodes) {
+    count++;
+    if (hasChildren(node)) {
+      count += quickCountNodes(node.children);
+    }
+  }
+  return count;
+}
+
+// Send data immediately (used after property changes)
 function sendSelectionData() {
   const data = analyzeSelection();
   const parentInfo = getParentInfo();
@@ -303,14 +315,22 @@ function sendSelectionData() {
   });
 }
 
-sendSelectionData();
+// Send loading state then compute data (used on selection change)
+function sendLoadingThenData() {
+  const sel = pixso.currentPage.selection;
+  const layerCount = sel && sel.length > 0 ? quickCountNodes(sel) : 0;
+  pixso.ui.postMessage({ type: "loading", layerCount });
 
-// Listen for selection changes
-pixso.on("selectionchange", () => {
-  pixso.ui.postMessage({ type: "loading" });
   setTimeout(() => {
     sendSelectionData();
   }, 10);
+}
+
+sendLoadingThenData();
+
+// Listen for selection changes
+pixso.on("selectionchange", () => {
+  sendLoadingThenData();
 });
 
 // Listen for messages from UI
