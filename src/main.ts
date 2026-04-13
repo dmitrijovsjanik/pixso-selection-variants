@@ -143,12 +143,19 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
     }
 
     if (propValue.type === "INSTANCE_SWAP" && typeof propValue.value === "string") {
-      // Resolve component ID to name
+      // Resolve component ID to name (local nodes)
       const swapNode = pixso.getNodeById(propValue.value);
       if (swapNode) {
-        info.currentValueName = swapNode.name;
+        // For variants inside a ComponentSet, show the set name
+        const swapParent = swapNode.parent;
+        if (swapParent && swapParent.type === "COMPONENT_SET") {
+          info.currentValueName = swapParent.name + " / " + swapNode.name;
+        } else {
+          info.currentValueName = swapNode.name;
+        }
       } else {
-        info.currentValueName = String(propValue.value);
+        // Remote component — ID can't be resolved locally, mark for async
+        info.currentValueName = "";
       }
 
       // Collect preferred values keys for async resolution
@@ -600,6 +607,120 @@ pixso.ui.on("message", (msg: any) => {
       }
       pixso.ui.postMessage({ type: "swap-options", swapOptionsMap });
     });
+  }
+
+  if (msg.type === "search-components") {
+    // Search across all subscribed libraries for components matching query
+    const { query, propertyName, instanceId, componentName: bulkComponentName } = msg;
+
+    pixso.getLibraryListAsync().then(async (libraries) => {
+      const results: SwapOption[] = [];
+      const q = query.toLowerCase();
+
+      // Also search local components
+      const localComponents: SceneNode[] = [];
+      function findLocalComponents(node: BaseNode) {
+        if ("type" in node) {
+          if (node.type === "COMPONENT") {
+            localComponents.push(node as SceneNode);
+          } else if (node.type === "COMPONENT_SET") {
+            // Add individual variants
+            if ("children" in node) {
+              for (const child of (node as any).children) {
+                if (child.type === "COMPONENT") {
+                  localComponents.push(child);
+                }
+              }
+            }
+          }
+          if ("children" in node && node.type !== "INSTANCE") {
+            for (const child of (node as any).children) {
+              findLocalComponents(child);
+            }
+          }
+        }
+      }
+      findLocalComponents(pixso.currentPage);
+
+      for (const comp of localComponents) {
+        if (comp.name.toLowerCase().includes(q)) {
+          results.push({ id: comp.id, name: comp.name });
+        }
+        if (results.length >= 30) break;
+      }
+
+      // Search subscribed libraries
+      for (const lib of libraries) {
+        if (!lib.subscribed) continue;
+        if (results.length >= 30) break;
+
+        try {
+          const assets = await pixso.getLibraryByKeyAsync(lib.key);
+          for (const comp of assets.componentList) {
+            if (results.length >= 30) break;
+            if (comp.name.toLowerCase().includes(q)) {
+              if (comp.type === "COMPONENT_SET") {
+                // Add variants
+                for (const v of comp.variants) {
+                  if (results.length >= 30) break;
+                  results.push({ id: v.key, name: comp.name + " / " + v.name });
+                }
+              } else {
+                results.push({ id: comp.key, name: comp.name });
+              }
+            }
+          }
+        } catch {
+          // skip unavailable libraries
+        }
+      }
+
+      pixso.ui.postMessage({
+        type: "search-results",
+        results,
+        propertyName,
+        instanceId: instanceId || null,
+        componentName: bulkComponentName || null,
+      });
+    });
+  }
+
+  if (msg.type === "apply-swap-from-search") {
+    // Apply a swap from search results — may need import if it's a library key
+    const { instanceId, propertyName, componentIdOrKey, bulkComponentName } = msg;
+
+    const applySwap = (compId: string) => {
+      if (bulkComponentName) {
+        // Bulk
+        const data = analyzeSelectionSync();
+        const targets = data.groupedByComponent[bulkComponentName] ?? [];
+        for (const inst of targets) {
+          const node = pixso.getNodeById(inst.id) as InstanceNode | null;
+          if (node && node.type === "INSTANCE") {
+            node.setProperties({ [propertyName]: compId });
+          }
+        }
+      } else if (instanceId) {
+        const node = pixso.getNodeById(instanceId) as InstanceNode | null;
+        if (node && node.type === "INSTANCE") {
+          node.setProperties({ [propertyName]: compId });
+        }
+      }
+      sendSelectionData();
+    };
+
+    // Try as local node ID first
+    const localNode = pixso.getNodeById(componentIdOrKey);
+    if (localNode) {
+      applySwap(localNode.id);
+    } else {
+      // It's a library key — import first
+      pixso.importComponentByKeyAsync(componentIdOrKey).then((comp) => {
+        applySwap(comp.id);
+      }).catch(() => {
+        console.error("Failed to import component:", componentIdOrKey);
+      });
+    }
   }
 
   if (msg.type === "refresh") {
