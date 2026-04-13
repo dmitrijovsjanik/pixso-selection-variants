@@ -192,6 +192,13 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
     }
   }
 
+  // Log swap properties for debugging
+  for (const [k, v] of Object.entries(compProps)) {
+    if (v.type === "INSTANCE_SWAP") {
+      console.log("[SwapDebug] prop:", k, "value:", v.value, "inDefs:", !!(definitions && definitions[k]), "inOrder:", orderedKeys.includes(k));
+    }
+  }
+
   for (const propName of orderedKeys) {
     const propValue = compProps[propName];
     if (!propValue) continue;
