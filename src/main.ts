@@ -1228,9 +1228,7 @@ pixso.ui.on("message", (msg: any) => {
       const values: { id: string; name: string; thumbnailDataUrl: string }[] = [];
       const keySet = new Set(prefKeys);
 
-      // Send empty first to stop loading state
-      pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [] });
-
+      // Don't send empty — UI will show loading until results arrive
       // Search all subscribed libraries for preferred keys
       pixso.getLibraryListAsync().then(async (libraries) => {
         for (const lib of libraries) {
