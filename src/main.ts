@@ -129,15 +129,17 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
     definitions = mainComponent.componentPropertyDefinitions;
   }
 
-  for (const [propName, propValue] of Object.entries(compProps)) {
-    const def = definitions?.[propName];
-    // Only show properties defined on this component level, not nested/exposed ones
-    if (!def) continue;
+  // Iterate in definitions order to preserve the designer's property order
+  const defKeys = definitions ? Object.keys(definitions) : [];
+  for (const propName of defKeys) {
+    const propValue = compProps[propName];
+    if (!propValue) continue; // definition exists but no value on this instance
+    const def = definitions![propName];
     const info: ComponentPropertyInfo = {
       name: propName,
       type: propValue.type,
       currentValue: propValue.value,
-      defaultValue: def?.defaultValue,
+      defaultValue: def.defaultValue,
     };
 
     if (propValue.type === "VARIANT" && def) {
