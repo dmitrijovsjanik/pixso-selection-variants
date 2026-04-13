@@ -219,15 +219,14 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
         return p ? "Local · " + p.name : "Local";
       };
 
-      // Strategy 1: find child via componentPropertyReferences — get layer name
-      if (hasChildren(instance)) {
-        for (const child of instance.children) {
+      // Strategy 1: find child via componentPropertyReferences — recursive search
+      function findSwapRef(parent: SceneNode): boolean {
+        if (!hasChildren(parent)) return false;
+        for (const child of parent.children) {
           if ("componentPropertyReferences" in child) {
             const refs = (child as any).componentPropertyReferences;
             if (refs && refs.mainComponent === propName) {
-              // Use the layer name as display name
               info.currentValueName = child.name;
-              // Get component source info
               if (isInstanceNode(child)) {
                 const mc = child.mainComponent;
                 if (mc) {
@@ -236,11 +235,14 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
                   info.currentValueSource = compName + " · " + getSource(mc);
                 }
               }
-              break;
+              return true;
             }
           }
+          if (findSwapRef(child)) return true;
         }
+        return false;
       }
+      findSwapRef(instance);
 
       // Strategy 2 fallback: getNodeById on the value
       if (!info.currentValueName) {
