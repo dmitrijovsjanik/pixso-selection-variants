@@ -430,7 +430,6 @@ function sendSelectionData() {
     data,
     parentInfo,
   });
-  resolveSwapOptions(data);
 }
 
 // Send with loading + live progress (used on selection change)
@@ -444,7 +443,6 @@ function sendLoadingThenData() {
       data,
       parentInfo,
     });
-    resolveSwapOptions(data);
   });
 }
 
@@ -557,6 +555,51 @@ pixso.ui.on("message", (msg: any) => {
         pixso.currentPage.selection = [parent as SceneNode];
       }
     }
+  }
+
+  if (msg.type === "resolve-swap-options") {
+    // Lazy resolve: only when user clicks on an INSTANCE_SWAP property
+    const { propertyName } = msg;
+    pixso.ui.postMessage({ type: "swap-loading", propertyName });
+
+    const data = analyzeSelectionSync();
+    // Find preferred values for this property
+    let keys: string[] = [];
+    for (const inst of data.instances) {
+      for (const cp of inst.componentProperties) {
+        if (cp.name === propertyName && cp.type === "INSTANCE_SWAP" && cp.preferredValues) {
+          keys = cp.preferredValues;
+          break;
+        }
+      }
+      if (keys.length > 0) break;
+    }
+
+    if (keys.length === 0) {
+      pixso.ui.postMessage({ type: "swap-options", swapOptionsMap: {} });
+      return;
+    }
+
+    Promise.all(
+      keys.map(async (key) => {
+        try {
+          const comp = await pixso.importComponentByKeyAsync(key);
+          return { id: comp.id, name: comp.name };
+        } catch {
+          return null;
+        }
+      })
+    ).then((results) => {
+      const options: SwapOption[] = [];
+      for (const r of results) {
+        if (r) options.push(r);
+      }
+      const swapOptionsMap: { [name: string]: SwapOption[] } = {};
+      if (options.length > 0) {
+        swapOptionsMap[propertyName] = options;
+      }
+      pixso.ui.postMessage({ type: "swap-options", swapOptionsMap });
+    });
   }
 
   if (msg.type === "refresh") {

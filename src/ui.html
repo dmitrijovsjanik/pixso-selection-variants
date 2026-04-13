@@ -294,7 +294,21 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-style: italic;
+  }
+
+  .instance-swap-value.clickable {
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .instance-swap-value.clickable:hover {
+    background: var(--brand-a-3);
+    color: var(--brand-11);
+  }
+
+  .instance-swap-value.loading {
+    color: var(--neutral-5);
+    pointer-events: none;
   }
 
   /* ─── Toggle/Switch (fast.ui.kit Switcher: 24x14 small) ─── */
@@ -829,12 +843,12 @@
           </div>`;
       }
 
-      // No swap options resolved yet — show read-only with loading hint
+      // No swap options resolved yet — clickable to load them
       return `
         <div class="property-row">
           <span class="property-label" title="${escAttr(prop.name)}">${escHtml(clean)}</span>
           <div class="property-control">
-            <span class="instance-swap-value" title="${escAttr(displayName)}">${escHtml(displayName)}</span>
+            <span class="instance-swap-value clickable" data-resolve-swap="${escAttr(prop.name)}" title="Click to load swap options">${escHtml(displayName)}</span>
           </div>
         </div>`;
     }
@@ -1096,6 +1110,17 @@
 
   // ─── Attach event listeners ───
   function attachEventListeners() {
+    // Resolve INSTANCE_SWAP options on click
+    document.querySelectorAll('[data-resolve-swap]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const propName = el.dataset.resolveSwap;
+        el.classList.add('loading');
+        el.textContent = 'Loading swap options...';
+        postMsg({ type: 'resolve-swap-options', propertyName: propName });
+      });
+    });
+
     // Collapse/expand component groups
     document.querySelectorAll('[data-toggle]').forEach(el => {
       el.addEventListener('click', (e) => {
@@ -1236,7 +1261,9 @@
     }
 
     if (msg.type === 'swap-options') {
-      swapOptionsMap = msg.swapOptionsMap || {};
+      const newOptions = msg.swapOptionsMap || {};
+      // Merge with existing (don't lose previously resolved ones)
+      Object.assign(swapOptionsMap, newOptions);
       // Re-render to show dropdowns instead of read-only values
       if (currentData) {
         renderVariantsTab(currentData);
