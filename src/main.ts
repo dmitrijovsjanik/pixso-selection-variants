@@ -1224,17 +1224,15 @@ pixso.ui.on("message", (msg: any) => {
     const shouldShowQuickSwap = prefKeys.length > 0 && currentKeyInPreferred;
 
     if (shouldShowQuickSwap) {
-      // Show quick swap list — search ONLY via library API (no full document scan)
+      // Show quick swap — use currentComp's library only (fast, targeted)
       const values: { id: string; name: string; thumbnailDataUrl: string }[] = [];
       const keySet = new Set(prefKeys);
 
-      // Don't send empty — UI will show loading until results arrive
-      // Search all subscribed libraries for preferred keys
-      pixso.getLibraryListAsync().then(async (libraries) => {
-        for (const lib of libraries) {
-          if (!lib.subscribed || keySet.size === 0) continue;
+      // Get library info from currentComp directly
+      currentComp!.getLibraryInfoAsync().then(async (libInfo) => {
+        if (libInfo && libInfo.key) {
           try {
-            const assets = await pixso.getLibraryByKeyAsync(lib.key);
+            const assets = await pixso.getLibraryByKeyAsync(libInfo.key);
             for (const comp of assets.componentList) {
               if (comp.type === "COMPONENT_SET") {
                 if (keySet.has(comp.key)) {
@@ -1252,23 +1250,44 @@ pixso.ui.on("message", (msg: any) => {
                 values.push({ id: comp.key, name: comp.name, thumbnailDataUrl: comp.thumbnailUrl || "" });
                 keySet.delete(comp.key);
               }
-              if (keySet.size === 0) break;
             }
           } catch {}
-          // Send partial results
-          if (values.length > 0) {
-            pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [...values] });
-          }
         }
-        // Also try getNodeById for any remaining keys (local components)
-        for (const key of keySet) {
-          // key might be a node ID for local components
-          const node = pixso.getNodeById(key);
-          if (node && node.type === "COMPONENT") {
-            values.push({ id: node.id, name: node.name, thumbnailDataUrl: "" });
-          }
+
+        // For remaining keys, try other subscribed libraries
+        if (keySet.size > 0) {
+          try {
+            const libraries = await pixso.getLibraryListAsync();
+            for (const lib of libraries) {
+              if (!lib.subscribed || keySet.size === 0) continue;
+              if (libInfo && lib.key === libInfo.key) continue; // already searched
+              try {
+                const assets = await pixso.getLibraryByKeyAsync(lib.key);
+                for (const comp of assets.componentList) {
+                  if (comp.type === "COMPONENT_SET") {
+                    for (const v of comp.variants) {
+                      if (keySet.has(v.key)) {
+                        values.push({ id: v.key, name: comp.name + " / " + v.name, thumbnailDataUrl: v.thumbnailUrl || "" });
+                        keySet.delete(v.key);
+                      }
+                    }
+                  } else if (keySet.has(comp.key)) {
+                    values.push({ id: comp.key, name: comp.name, thumbnailDataUrl: comp.thumbnailUrl || "" });
+                    keySet.delete(comp.key);
+                  }
+                  if (keySet.size === 0) break;
+                }
+              } catch {}
+            }
+          } catch {}
         }
-        pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [...values] });
+
+        console.log("[Swap] Quick swap resolved:", values.length, "of", prefKeys.length);
+        pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values });
+      }).catch(() => {
+        // getLibraryInfoAsync failed — send empty
+        console.log("[Swap] getLibraryInfoAsync failed, sending empty");
+        pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [] });
       });
     } else {
       // Navigate to current component's location
