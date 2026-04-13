@@ -1184,31 +1184,74 @@ pixso.ui.on("message", (msg: any) => {
 
       console.log("[Swap] Found locally:", foundKeys.size, "of", keySet.size);
     } else {
-      // No preferred values — try siblings via componentPropertyReferences
+      // No preferred values — find the current swap component and show its container siblings
       if (sel && sel.length > 0) {
-        const stack: SceneNode[] = [...sel];
-        while (stack.length > 0 && values.length === 0) {
-          const node = stack.pop()!;
+        // Find the child controlled by this swap property
+        let swapComp: ComponentNode | null = null;
+        const findStack: SceneNode[] = [...sel];
+        while (findStack.length > 0 && !swapComp) {
+          const node = findStack.pop()!;
           if (isInstanceNode(node) && hasChildren(node)) {
             for (const child of node.children) {
               if ("componentPropertyReferences" in child) {
                 const refs = (child as any).componentPropertyReferences;
                 if (refs && refs.mainComponent === propertyName && isInstanceNode(child)) {
-                  const mc = child.mainComponent;
-                  if (mc && mc.parent && mc.parent.type === "COMPONENT_SET") {
-                    for (const sibling of (mc.parent as ComponentSetNode).children) {
-                      if (isComponentNode(sibling)) {
-                        values.push({ id: sibling.id, name: sibling.name, thumbnailDataUrl: "" });
-                      }
-                    }
-                  }
+                  swapComp = child.mainComponent;
                   break;
                 }
               }
             }
           }
-          if (values.length === 0 && hasChildren(node)) {
-            for (const c of node.children) stack.push(c);
+          if (!swapComp && hasChildren(node)) {
+            for (const c of node.children) findStack.push(c);
+          }
+        }
+
+        if (swapComp) {
+          // Strategy A: ComponentSet siblings
+          const csParent = swapComp.parent;
+          if (csParent && csParent.type === "COMPONENT_SET") {
+            for (const sibling of (csParent as ComponentSetNode).children) {
+              if (isComponentNode(sibling)) {
+                values.push({ id: sibling.id, name: sibling.name, thumbnailDataUrl: "" });
+              }
+            }
+          }
+
+          // Strategy B: If no ComponentSet, find components in the same container (folder/frame)
+          if (values.length <= 1) {
+            values.length = 0; // reset
+            // Walk up to find the container frame
+            let container: BaseNode | null = csParent || swapComp.parent;
+            // Go up until we find a frame that's not a ComponentSet
+            while (container && (container.type === "COMPONENT_SET" || container.type === "COMPONENT")) {
+              container = container.parent;
+            }
+            if (container && "children" in container) {
+              // Collect all components in this container
+              function collectFromContainer(node: BaseNode) {
+                if (values.length >= 30) return;
+                if ("type" in node) {
+                  if (node.type === "COMPONENT_SET" && "children" in node) {
+                    // Add as a single entry with the set name
+                    const firstChild = (node as any).children[0];
+                    if (firstChild && firstChild.type === "COMPONENT") {
+                      values.push({ id: firstChild.id, name: node.name, thumbnailDataUrl: "" });
+                    }
+                  } else if (node.type === "COMPONENT") {
+                    const p = node.parent;
+                    if (!p || p.type !== "COMPONENT_SET") {
+                      values.push({ id: node.id, name: node.name, thumbnailDataUrl: "" });
+                    }
+                  } else if ("children" in node && node.type !== "INSTANCE") {
+                    for (const c of (node as any).children) {
+                      collectFromContainer(c);
+                    }
+                  }
+                }
+              }
+              collectFromContainer(container);
+            }
           }
         }
       }
