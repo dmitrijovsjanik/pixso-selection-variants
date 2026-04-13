@@ -1143,78 +1143,7 @@ pixso.ui.on("message", (msg: any) => {
       return null;
     }
 
-    // Helper: get component location for navigation (async — resolves library info)
-    async function getCompLocation(comp: ComponentNode): Promise<{ sourceKey: string; containerName: string }> {
-      // Try to get library info — works for both local-published and remote components
-      try {
-        const libInfo = await comp.getLibraryInfoAsync();
-        if (libInfo && libInfo.key) {
-          // It's a published component — find containerName from library
-          const assets = await pixso.getLibraryByKeyAsync(libInfo.key);
-          for (const c of assets.componentList) {
-            if (c.key === comp.key) {
-              return { sourceKey: libInfo.key, containerName: c.containerName || c.pageName || "" };
-            }
-            if (c.type === "COMPONENT_SET") {
-              for (const v of c.variants) {
-                if (v.key === comp.key) {
-                  return { sourceKey: libInfo.key, containerName: c.containerName || c.pageName || "" };
-                }
-              }
-            }
-          }
-          // Component found in library but not in componentList — use library key with empty container
-          return { sourceKey: libInfo.key, containerName: "" };
-        }
-      } catch {}
 
-      // Try containerName/pageName from PublishableNodeMixin
-      const pubContainerName = (comp as any).containerName;
-      const pubPageName = (comp as any).pageName;
-
-      if (pubContainerName || pubPageName) {
-        // Component has publishing info — it may be from a library
-        // Try to find which subscribed library contains this component
-        try {
-          const libraries = await pixso.getLibraryListAsync();
-          for (const lib of libraries) {
-            if (!lib.subscribed) continue;
-            const assets = await pixso.getLibraryByKeyAsync(lib.key);
-            for (const c of assets.componentList) {
-              if (c.key === comp.key) {
-                return { sourceKey: lib.key, containerName: c.containerName || c.pageName || "" };
-              }
-              if (c.type === "COMPONENT_SET") {
-                for (const v of c.variants) {
-                  if (v.key === comp.key) {
-                    return { sourceKey: lib.key, containerName: c.containerName || c.pageName || "" };
-                  }
-                }
-              }
-            }
-          }
-        } catch {}
-      }
-
-      // Fallback: truly local component — find container frame
-      let sourceKey = "__local__";
-      let containerName = "";
-      let p: BaseNode | null = comp.parent;
-      if (p && p.type === "COMPONENT_SET") p = p.parent;
-      while (p && p.type !== "PAGE") {
-        if (p.type === "FRAME" || p.type === "SECTION") {
-          containerName = p.name;
-          break;
-        }
-        p = p.parent;
-      }
-      if (!containerName) {
-        let page: BaseNode | null = comp;
-        while (page && page.type !== "PAGE") page = page.parent;
-        if (page) containerName = page.name;
-      }
-      return { sourceKey, containerName };
-    }
 
     // Step 1: Get preferredValues keys
     let prefKeys: string[] = [];
@@ -1345,21 +1274,19 @@ pixso.ui.on("message", (msg: any) => {
     } else {
       // Navigate to current component's location
       if (currentComp) {
-        getCompLocation(currentComp).then((loc) => {
-          // Add component name so UI can compute sub-path from slashes
-          const compName = currentComp!.parent?.type === "COMPONENT_SET"
-            ? currentComp!.parent.name
-            : currentComp!.name;
-          pixso.ui.postMessage({
-            type: "preferred-swap-values",
-            propertyName,
-            values: [],
-            navigateTo: { ...loc, componentName: compName },
-          });
+        const compName = currentComp.parent?.type === "COMPONENT_SET"
+          ? currentComp.parent.name
+          : currentComp.name;
+        const compKey = currentComp.key;
+
+        // Send component info — UI will find it in sources
+        pixso.ui.postMessage({
+          type: "preferred-swap-values",
+          propertyName,
+          values: [],
+          navigateTo: { componentName: compName, componentKey: compKey },
         });
-        return; // async — will send message from .then()
       } else {
-        // Nothing found
         pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [] });
       }
     }
