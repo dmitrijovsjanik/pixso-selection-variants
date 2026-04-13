@@ -1,8 +1,7 @@
 {
   "name": "Selection Variants & Instances",
   "id": "selection-variants-dev",
-  "api": "1.0.0",
-  "main": "dist/main.js",
-  "ui": "src/ui.html",
+  "main": "./dist/main.js",
+  "ui": "./src/ui.html",
   "editorType": ["pixso"]
 }

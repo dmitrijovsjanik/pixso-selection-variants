@@ -263,7 +263,9 @@ function findVariantComponent(
 
 // ─── Message handling ────────────────────────────────────
 
+console.log("[Selection Variants] Plugin starting...");
 pixso.showUI(__html__, { width: 360, height: 520 });
+console.log("[Selection Variants] UI shown");
 
 // Send initial data
 function sendSelectionData() {
