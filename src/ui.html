@@ -372,9 +372,52 @@
     return name.replace(/#\d+:\d+$/, '').trim();
   }
 
+  // ─── Check if a variant is boolean-like (true/false, yes/no) ───
+  function isBooleanLikeVariant(prop) {
+    if (prop.type !== 'VARIANT' || !prop.options || prop.options.length !== 2) return false;
+    const sorted = prop.options.map(o => o.toLowerCase()).sort();
+    return (sorted[0] === 'false' && sorted[1] === 'true') ||
+           (sorted[0] === 'no' && sorted[1] === 'yes');
+  }
+
+  function getBooleanLikeChecked(prop) {
+    const val = String(prop.currentValue).toLowerCase();
+    return val === 'true' || val === 'yes';
+  }
+
+  function getBooleanLikeValues(prop) {
+    const sorted = prop.options.map(o => o.toLowerCase()).sort();
+    if (sorted[0] === 'false' && sorted[1] === 'true') {
+      return { on: prop.options.find(o => o.toLowerCase() === 'true'), off: prop.options.find(o => o.toLowerCase() === 'false') };
+    }
+    return { on: prop.options.find(o => o.toLowerCase() === 'yes'), off: prop.options.find(o => o.toLowerCase() === 'no') };
+  }
+
   // ─── Render a property control ───
   function renderPropertyControl(prop, instanceId, isBulk, componentName) {
     const clean = cleanPropName(prop.name);
+
+    // Boolean-like variants (true/false, yes/no) → render as toggle
+    if (isBooleanLikeVariant(prop)) {
+      const checked = getBooleanLikeChecked(prop);
+      const vals = getBooleanLikeValues(prop);
+      const evtType = isBulk ? 'bulk-set-variant' : 'set-variant';
+      const dataAttr = isBulk
+        ? `data-component="${escAttr(componentName)}" data-prop="${escAttr(prop.name)}"`
+        : `data-instance="${escAttr(instanceId)}" data-prop="${escAttr(prop.name)}"`;
+
+      return `
+        <div class="property-row">
+          <span class="property-label" title="${escAttr(prop.name)}">${escHtml(clean)}</span>
+          <div class="property-control">
+            <label class="toggle">
+              <input type="checkbox" class="prop-variant-toggle" data-type="${evtType}" ${dataAttr}
+                data-on="${escAttr(vals.on)}" data-off="${escAttr(vals.off)}" ${checked ? 'checked' : ''} />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>`;
+    }
 
     if (prop.type === 'VARIANT' && prop.options && prop.options.length > 0) {
       const options = prop.options.map(opt =>
@@ -670,6 +713,17 @@
     document.querySelectorAll('.prop-toggle').forEach(el => {
       el.addEventListener('change', () => {
         const msg = { type: el.dataset.type, propertyName: el.dataset.prop, newValue: el.checked };
+        if (el.dataset.instance) msg.instanceId = el.dataset.instance;
+        if (el.dataset.component) msg.componentName = el.dataset.component;
+        postMsg(msg);
+      });
+    });
+
+    // Boolean-like variant toggles (true/false, yes/no)
+    document.querySelectorAll('.prop-variant-toggle').forEach(el => {
+      el.addEventListener('change', () => {
+        const newValue = el.checked ? el.dataset.on : el.dataset.off;
+        const msg = { type: el.dataset.type, propertyName: el.dataset.prop, newValue };
         if (el.dataset.instance) msg.instanceId = el.dataset.instance;
         if (el.dataset.component) msg.componentName = el.dataset.component;
         postMsg(msg);
