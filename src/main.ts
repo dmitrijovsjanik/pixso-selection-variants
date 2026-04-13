@@ -21,6 +21,7 @@ interface ComponentPropertyInfo {
   type: string; // "BOOLEAN" | "TEXT" | "INSTANCE_SWAP" | "VARIANT"
   currentValue: string | boolean;
   currentValueName?: string; // resolved name for INSTANCE_SWAP
+  currentValueSource?: string; // source/page info for INSTANCE_SWAP
   defaultValue?: string | boolean;
   preferredValues?: string[];
   swapOptions?: SwapOption[]; // resolved preferred values for INSTANCE_SWAP
@@ -208,18 +209,29 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
     }
 
     if (propValue.type === "INSTANCE_SWAP" && typeof propValue.value === "string") {
+      // Helper: resolve name + source from a ComponentNode
+      const resolveComp = (mc: ComponentNode) => {
+        const mcP = mc.parent;
+        info.currentValueName = (mcP && mcP.type === "COMPONENT_SET") ? mcP.name + " / " + mc.name : mc.name;
+        // Get source: pageName + remote status
+        if (mc.remote) {
+          info.currentValueSource = (mc as any).pageName || "Library";
+        } else {
+          // Find page name by walking up
+          let p: BaseNode | null = mc;
+          while (p && p.type !== "PAGE") p = p.parent;
+          info.currentValueSource = p ? "Local · " + p.name : "Local";
+        }
+      };
+
       // Strategy 1: getNodeById on the value
       const swapNode = pixso.getNodeById(propValue.value);
       if (swapNode) {
         if (swapNode.type === "INSTANCE") {
           const mc = (swapNode as InstanceNode).mainComponent;
-          if (mc) {
-            const mcP = mc.parent;
-            info.currentValueName = (mcP && mcP.type === "COMPONENT_SET") ? mcP.name + " / " + mc.name : mc.name;
-          }
+          if (mc) resolveComp(mc);
         } else if (swapNode.type === "COMPONENT") {
-          const swapParent = swapNode.parent;
-          info.currentValueName = (swapParent && swapParent.type === "COMPONENT_SET") ? swapParent.name + " / " + swapNode.name : swapNode.name;
+          resolveComp(swapNode as ComponentNode);
         } else {
           info.currentValueName = swapNode.name;
         }
@@ -232,10 +244,7 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
             const refs = (child as any).componentPropertyReferences;
             if (refs && refs.mainComponent === propName && isInstanceNode(child)) {
               const mc = child.mainComponent;
-              if (mc) {
-                const mcP = mc.parent;
-                info.currentValueName = (mcP && mcP.type === "COMPONENT_SET") ? mcP.name + " / " + mc.name : mc.name;
-              }
+              if (mc) resolveComp(mc);
               break;
             }
           }
