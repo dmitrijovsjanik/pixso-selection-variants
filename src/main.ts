@@ -1099,18 +1099,37 @@ pixso.ui.on("message", (msg: any) => {
               console.log("[Swap] Property", propertyName, "currentValue:", currentValueId);
 
               const currentNode = pixso.getNodeById(currentValueId);
-              console.log("[Swap] getNodeById result:", currentNode ? currentNode.type + " " + currentNode.name : "null");
+              console.log("[Swap] currentValue ID:", currentValueId);
+              console.log("[Swap] getNodeById type:", currentNode?.type, "name:", currentNode?.name);
+              console.log("[Swap] parent type:", currentNode?.parent?.type, "name:", currentNode?.parent?.name);
+
+              // The value could be: ComponentNode ID, InstanceNode ID, or something else
+              // We need to find the ComponentNode and its ComponentSet
+              let targetComponent: ComponentNode | null = null;
 
               if (currentNode) {
-                const p = currentNode.parent;
-                if (p && p.type === "COMPONENT_SET") {
-                  for (const sibling of (p as ComponentSetNode).children) {
+                if (currentNode.type === "COMPONENT") {
+                  targetComponent = currentNode as ComponentNode;
+                } else if (currentNode.type === "INSTANCE") {
+                  // It's an instance — get its mainComponent
+                  targetComponent = (currentNode as InstanceNode).mainComponent;
+                  console.log("[Swap] Instance mainComponent:", targetComponent?.name, "parent:", targetComponent?.parent?.type, targetComponent?.parent?.name);
+                }
+              }
+
+              if (targetComponent) {
+                const componentSetParent = targetComponent.parent;
+                if (componentSetParent && componentSetParent.type === "COMPONENT_SET") {
+                  const cs = componentSetParent as ComponentSetNode;
+                  console.log("[Swap] ComponentSet found:", cs.name, "with", cs.children.length, "children");
+                  for (const sibling of cs.children) {
                     if (isComponentNode(sibling)) {
                       values.push({ id: sibling.id, name: sibling.name, thumbnailDataUrl: "" });
                     }
                   }
-                } else if (currentNode.type === "COMPONENT") {
-                  values.push({ id: currentNode.id, name: currentNode.name, thumbnailDataUrl: "" });
+                } else {
+                  console.log("[Swap] Component is standalone (no ComponentSet)");
+                  values.push({ id: targetComponent.id, name: targetComponent.name, thumbnailDataUrl: "" });
                 }
               }
             }
