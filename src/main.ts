@@ -208,17 +208,39 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
     }
 
     if (propValue.type === "INSTANCE_SWAP" && typeof propValue.value === "string") {
-      // Resolve component ID to name
+      // Strategy 1: getNodeById on the value
       const swapNode = pixso.getNodeById(propValue.value);
       if (swapNode) {
-        const swapParent = swapNode.parent;
-        if (swapParent && swapParent.type === "COMPONENT_SET") {
-          info.currentValueName = swapParent.name + " / " + swapNode.name;
+        if (swapNode.type === "INSTANCE") {
+          const mc = (swapNode as InstanceNode).mainComponent;
+          if (mc) {
+            const mcP = mc.parent;
+            info.currentValueName = (mcP && mcP.type === "COMPONENT_SET") ? mcP.name + " / " + mc.name : mc.name;
+          }
+        } else if (swapNode.type === "COMPONENT") {
+          const swapParent = swapNode.parent;
+          info.currentValueName = (swapParent && swapParent.type === "COMPONENT_SET") ? swapParent.name + " / " + swapNode.name : swapNode.name;
         } else {
           info.currentValueName = swapNode.name;
         }
       }
-      // If not resolved, leave undefined — UI will show ID gracefully
+
+      // Strategy 2: find child via componentPropertyReferences
+      if (!info.currentValueName && hasChildren(instance)) {
+        for (const child of instance.children) {
+          if ("componentPropertyReferences" in child) {
+            const refs = (child as any).componentPropertyReferences;
+            if (refs && refs.mainComponent === propName && isInstanceNode(child)) {
+              const mc = child.mainComponent;
+              if (mc) {
+                const mcP = mc.parent;
+                info.currentValueName = (mcP && mcP.type === "COMPONENT_SET") ? mcP.name + " / " + mc.name : mc.name;
+              }
+              break;
+            }
+          }
+        }
+      }
 
       // Collect preferred values keys for lazy resolution
       if (def && "preferredValues" in def && (def as any).preferredValues) {

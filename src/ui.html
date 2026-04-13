@@ -330,6 +330,8 @@
   .swap-diamond {
     flex-shrink: 0;
     color: var(--brand-9);
+    width: 10px;
+    height: 10px;
   }
 
   .swap-select-text {
@@ -342,6 +344,8 @@
   .swap-chevron {
     flex-shrink: 0;
     color: var(--neutral-9);
+    width: 12px;
+    height: 12px;
   }
 
   /* ─── Swap search ─── */
@@ -567,6 +571,11 @@
 
   .swap-component-item:hover {
     background: var(--brand-a-3);
+  }
+
+  .swap-component-item.current {
+    background: var(--brand-a-3);
+    border-left: 2px solid var(--brand-9);
   }
 
   .swap-thumb {
@@ -1181,15 +1190,16 @@
       const swapData = isBulk
         ? `data-swap-component="${escAttr(componentName)}" data-swap-prop="${escAttr(prop.name)}"`
         : `data-swap-instance="${escAttr(instanceId)}" data-swap-prop="${escAttr(prop.name)}"`;
+      const currentValAttr = `data-swap-current="${escAttr(String(prop.currentValue))}"`;
 
       return `
         <div class="property-row">
           <span class="property-label" title="${escAttr(prop.name)}">${escHtml(clean)}</span>
           <div class="property-control">
-            <span class="instance-swap-select" data-open-swap-search ${swapData} title="${escAttr(displayName)}">
+            <span class="instance-swap-select" data-open-swap-search ${swapData} ${currentValAttr} title="${escAttr(displayName)}">
               <svg class="swap-diamond" width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1L15 8L8 15L1 8Z"/></svg>
               <span class="swap-select-text">${escHtml(displayName)}</span>
-              <svg class="swap-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+              <svg class="swap-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
             </span>
           </div>
         </div>`;
@@ -1471,7 +1481,8 @@
         openSwapPicker(
           el.dataset.swapProp,
           el.dataset.swapInstance || null,
-          el.dataset.swapComponent || null
+          el.dataset.swapComponent || null,
+          el.dataset.swapCurrent || null
         );
       });
     });
@@ -1597,18 +1608,19 @@
   const librarySvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>`;
   const compSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>`;
 
-  function openSwapPicker(propertyName, instanceId, componentName) {
+  function openSwapPicker(propertyName, instanceId, componentName, currentValue) {
     swapPickerState = {
       propertyName,
       instanceId,
       componentName,
-      level: 'quickswap', // start with quick swap view
+      currentValue: currentValue || null, // ID of currently selected component
+      level: 'quickswap',
       history: [],
       sources: null,
       libraryCache: {},
       preferredValues: null,
       searchResults: null,
-      selectedSource: '__quickswap__', // default source
+      selectedSource: '__quickswap__',
       currentFolder: null,
       currentSet: null,
     };
@@ -1804,7 +1816,8 @@
       } else {
         thumb = `<div class="swap-thumb-loading"></div>`;
       }
-      html += `<div class="swap-component-item" data-picker-apply="${escAttr(pv.id)}">
+      const isCurrent = s.currentValue && pv.id === s.currentValue;
+      html += `<div class="swap-component-item ${isCurrent ? 'current' : ''}" data-picker-apply="${escAttr(pv.id)}">
         ${thumb}
         <div class="swap-comp-info"><div class="swap-comp-name">${escHtml(pv.name)}</div></div>
       </div>`;
@@ -1870,7 +1883,8 @@
           <span class="swap-item-chevron">${chevronSvg}</span>
         </div>`;
       } else {
-        html += `<div class="swap-component-item" data-picker-apply="${escAttr(comp.key || comp.id)}">
+        const isCurrentComp = s.currentValue && (comp.key === s.currentValue || comp.id === s.currentValue);
+        html += `<div class="swap-component-item ${isCurrentComp ? 'current' : ''}" data-picker-apply="${escAttr(comp.key || comp.id)}">
           ${thumb}
           <div class="swap-comp-info"><div class="swap-comp-name">${escHtml(comp.name)}</div></div>
         </div>`;
@@ -1894,7 +1908,8 @@
       } else {
         thumb = `<div class="swap-thumb-placeholder">${compSvg}</div>`;
       }
-      html += `<div class="swap-component-item" data-picker-apply="${escAttr(v.key || v.id)}">
+      const isCurrentV = s.currentValue && (v.key === s.currentValue || v.id === s.currentValue);
+      html += `<div class="swap-component-item ${isCurrentV ? 'current' : ''}" data-picker-apply="${escAttr(v.key || v.id)}">
         ${thumb}
         <div class="swap-comp-info"><div class="swap-comp-name">${escHtml(v.name)}</div></div>
       </div>`;
