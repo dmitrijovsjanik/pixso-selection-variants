@@ -143,22 +143,19 @@ function getComponentProperties(instance: InstanceNode): ComponentPropertyInfo[]
     }
 
     if (propValue.type === "INSTANCE_SWAP" && typeof propValue.value === "string") {
-      // Resolve component ID to name (local nodes)
+      // Resolve component ID to name
       const swapNode = pixso.getNodeById(propValue.value);
       if (swapNode) {
-        // For variants inside a ComponentSet, show the set name
         const swapParent = swapNode.parent;
         if (swapParent && swapParent.type === "COMPONENT_SET") {
           info.currentValueName = swapParent.name + " / " + swapNode.name;
         } else {
           info.currentValueName = swapNode.name;
         }
-      } else {
-        // Remote component — ID can't be resolved locally, mark for async
-        info.currentValueName = "";
       }
+      // If not resolved, leave undefined — UI will show ID gracefully
 
-      // Collect preferred values keys for async resolution
+      // Collect preferred values keys for lazy resolution
       if (def && "preferredValues" in def && (def as any).preferredValues) {
         info.preferredValues = (def as any).preferredValues.map(
           (pv: { type: string; key: string }) => pv.key
@@ -721,6 +718,37 @@ pixso.ui.on("message", (msg: any) => {
         console.error("Failed to import component:", componentIdOrKey);
       });
     }
+  }
+
+  if (msg.type === "get-thumbnails") {
+    // Export small PNG thumbnails for given node IDs
+    const { nodeIds } = msg;
+    const results: { id: string; dataUrl: string }[] = [];
+
+    Promise.all(
+      (nodeIds as string[]).map(async (id) => {
+        try {
+          const node = pixso.getNodeById(id);
+          if (node && "exportAsync" in node) {
+            const bytes = await (node as any).exportAsync({
+              format: "PNG",
+              constraint: { type: "HEIGHT", value: 32 },
+            } as ExportSettingsImage);
+            const base64 = pixso.base64Encode(bytes);
+            return { id, dataUrl: `data:image/png;base64,${base64}` };
+          }
+        } catch {
+          // skip
+        }
+        return null;
+      })
+    ).then((all) => {
+      const thumbnails: { [id: string]: string } = {};
+      for (const r of all) {
+        if (r) thumbnails[r.id] = r.dataUrl;
+      }
+      pixso.ui.postMessage({ type: "thumbnails", thumbnails });
+    });
   }
 
   if (msg.type === "refresh") {

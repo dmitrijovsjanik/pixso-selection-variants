@@ -580,6 +580,15 @@
     flex-shrink: 0;
   }
 
+  .instance-thumb {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    border-radius: var(--radius-sm);
+    background: var(--neutral-a-2);
+    flex-shrink: 0;
+  }
+
   /* ─── Collapse arrow ─── */
   .collapse-arrow {
     display: inline-block;
@@ -726,6 +735,7 @@
   let detailViewComponent = null; // null = bulk list, string = component name for detail view
   let parentInfo = null;  // {id, name} or null
   let swapOptionsMap = {}; // propName -> [{id, name}]
+  let thumbnailCache = {}; // nodeId -> dataUrl
 
   // ─── Tab switching ───
   document.querySelectorAll('.tab').forEach(tab => {
@@ -868,38 +878,17 @@
     }
 
     if (prop.type === 'INSTANCE_SWAP') {
-      const displayName = prop.currentValueName || 'Component';
+      const displayName = prop.currentValueName || String(prop.currentValue).substring(0, 12) + '...';
       const swapData = isBulk
         ? `data-swap-component="${escAttr(componentName)}" data-swap-prop="${escAttr(prop.name)}"`
         : `data-swap-instance="${escAttr(instanceId)}" data-swap-prop="${escAttr(prop.name)}"`;
-
-      // Quick swap options (preferred values)
-      const options = swapOptionsMap[prop.name];
-      let quickSwapHtml = '';
-      if (options && options.length > 0) {
-        const evtType = isBulk ? 'bulk-set-component-property' : 'set-component-property';
-        const dataAttr = isBulk
-          ? `data-component="${escAttr(componentName)}" data-prop="${escAttr(prop.name)}"`
-          : `data-instance="${escAttr(instanceId)}" data-prop="${escAttr(prop.name)}"`;
-
-        const optionsHtml = options.map(opt =>
-          `<option value="${escAttr(opt.id)}" ${opt.id === String(prop.currentValue) ? 'selected' : ''}>${escHtml(opt.name)}</option>`
-        ).join('');
-        const currentInOptions = options.some(o => o.id === String(prop.currentValue));
-        const currentOption = !currentInOptions
-          ? `<option value="${escAttr(String(prop.currentValue))}" selected>${escHtml(displayName)}</option>`
-          : '';
-
-        quickSwapHtml = `<select class="prop-select" data-type="${evtType}" ${dataAttr}>
-          ${currentOption}${optionsHtml}
-        </select>`;
-      }
 
       return `
         <div class="property-row">
           <span class="property-label" title="${escAttr(prop.name)}">${escHtml(clean)}</span>
           <div class="property-control">
-            ${quickSwapHtml || `<span class="instance-swap-value clickable" data-open-swap-search ${swapData}>${escHtml(displayName)}</span>`}
+            <span class="instance-swap-value clickable" data-open-swap-search ${swapData}
+              title="${escAttr(displayName)}">${escHtml(displayName)}</span>
           </div>
         </div>`;
     }
@@ -1069,10 +1058,12 @@
     for (const inst of instances) {
       if (inst.variantProperties.length === 0 && inst.componentProperties.length === 0) continue;
 
+      const thumbSrc = thumbnailCache[inst.id] || '';
       html += `<div class="detail-instance">`;
       html += `<div class="detail-instance-header" data-instance-toggle data-click-instance="${escAttr(inst.id)}">
         <span class="collapse-arrow"></span>
-        <svg class="detail-instance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <img class="instance-thumb" data-thumb-id="${escAttr(inst.id)}" src="${thumbSrc}" style="${thumbSrc ? '' : 'display:none'}" />
+        <svg class="detail-instance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ${thumbSrc ? 'style="display:none"' : ''}>
           <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
         </svg>
         <span class="detail-instance-name">${escHtml(inst.name)}</span>
@@ -1161,34 +1152,64 @@
 
   // ─── Attach event listeners ───
   function attachEventListeners() {
-    // Open search for INSTANCE_SWAP
+    // Open swap dropdown with search
     document.querySelectorAll('[data-open-swap-search]').forEach(el => {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
         const propName = el.dataset.swapProp;
         const instanceId = el.dataset.swapInstance || null;
-        const componentName = el.dataset.swapComponent || null;
+        const compName = el.dataset.swapComponent || null;
 
-        // Replace the value with a search input
         const wrap = el.parentElement;
+        const existingOptions = swapOptionsMap[propName];
+        const hasQuickSwap = existingOptions && existingOptions.length > 0;
+
+        // Build quick swap items if already resolved
+        let quickSwapHtml = '';
+        if (hasQuickSwap) {
+          quickSwapHtml = existingOptions.map(opt =>
+            `<div class="swap-search-item" data-apply-swap="${escAttr(opt.id)}"
+              data-apply-prop="${escAttr(propName)}"
+              ${instanceId ? `data-apply-instance="${escAttr(instanceId)}"` : ''}
+              ${compName ? `data-apply-component="${escAttr(compName)}"` : ''}
+            >${escHtml(opt.name)}</div>`
+          ).join('');
+        }
+
         wrap.innerHTML = `<div class="swap-search-wrap">
           <input class="swap-search-input" type="text" placeholder="Search components..." autofocus
             data-swap-prop="${escAttr(propName)}"
             ${instanceId ? `data-swap-instance="${escAttr(instanceId)}"` : ''}
-            ${componentName ? `data-swap-component="${escAttr(componentName)}"` : ''} />
-          <div class="swap-search-results"><div class="swap-search-hint">Type to search...</div></div>
+            ${compName ? `data-swap-component="${escAttr(compName)}"` : ''} />
+          <div class="swap-search-results">
+            ${quickSwapHtml || '<div class="swap-search-hint">Type to search</div>'}
+          </div>
         </div>`;
 
         const input = wrap.querySelector('.swap-search-input');
         const resultsDiv = wrap.querySelector('.swap-search-results');
         input.focus();
 
+        // Bind click on quick swap items
+        bindSwapResultClicks(resultsDiv);
+
+        // If no quick swap yet, request them
+        if (!hasQuickSwap) {
+          postMsg({ type: 'resolve-swap-options', propertyName: propName });
+        }
+
         let debounceTimer = null;
         input.addEventListener('input', () => {
           clearTimeout(debounceTimer);
           const q = input.value.trim();
           if (q.length < 2) {
-            resultsDiv.innerHTML = '<div class="swap-search-hint">Type at least 2 characters...</div>';
+            // Show quick swap or hint
+            if (hasQuickSwap) {
+              resultsDiv.innerHTML = quickSwapHtml;
+              bindSwapResultClicks(resultsDiv);
+            } else {
+              resultsDiv.innerHTML = '<div class="swap-search-hint">Type to search</div>';
+            }
             return;
           }
           resultsDiv.innerHTML = '<div class="swap-search-hint">Searching...</div>';
@@ -1198,12 +1219,12 @@
               query: q,
               propertyName: propName,
               instanceId: instanceId,
-              componentName: componentName,
+              componentName: compName,
             });
           }, 300);
         });
 
-        // Close on blur (with delay so click on result works)
+        // Close on blur
         input.addEventListener('blur', () => {
           setTimeout(() => {
             if (!wrap.contains(document.activeElement)) {
@@ -1214,9 +1235,6 @@
             }
           }, 200);
         });
-
-        // Also load preferred values if available
-        postMsg({ type: 'resolve-swap-options', propertyName: propName });
       });
     });
 
@@ -1333,6 +1351,22 @@
     return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  // ─── Bind click on swap search result items ───
+  function bindSwapResultClicks(container) {
+    container.querySelectorAll('.swap-search-item').forEach(item => {
+      item.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        postMsg({
+          type: 'apply-swap-from-search',
+          componentIdOrKey: item.dataset.applySwap,
+          propertyName: item.dataset.applyProp,
+          instanceId: item.dataset.applyInstance || null,
+          bulkComponentName: item.dataset.applyComponent || null,
+        });
+      });
+    });
+  }
+
   // ─── Message from sandbox ───
   window.onmessage = (event) => {
     const msg = event.data.pluginMessage;
@@ -1353,10 +1387,32 @@
     if (msg.type === 'selection-data') {
       currentData = msg.data;
       parentInfo = msg.parentInfo || null;
-      swapOptionsMap = {}; // reset, will be populated by swap-options message
+      swapOptionsMap = {};
       updateGoUpBar();
       renderVariantsTab(currentData);
       renderInstancesTab(currentData);
+
+      // Request thumbnails for visible instances (first 20)
+      if (currentData.instances && currentData.instances.length > 0) {
+        const ids = currentData.instances
+          .slice(0, 20)
+          .map(i => i.id)
+          .filter(id => !thumbnailCache[id]);
+        if (ids.length > 0) {
+          postMsg({ type: 'get-thumbnails', nodeIds: ids });
+        }
+      }
+    }
+
+    if (msg.type === 'thumbnails') {
+      Object.assign(thumbnailCache, msg.thumbnails || {});
+      // Update existing thumbnail placeholders
+      for (const [id, url] of Object.entries(msg.thumbnails || {})) {
+        document.querySelectorAll(`[data-thumb-id="${id}"]`).forEach(el => {
+          el.src = url;
+          el.style.display = 'block';
+        });
+      }
     }
 
     if (msg.type === 'search-results') {
@@ -1373,19 +1429,7 @@
           ${msg.componentName ? `data-apply-component="${escAttr(msg.componentName)}"` : ''}
         >${escHtml(r.name)}</div>`
       ).join('');
-
-      resultsDiv.querySelectorAll('.swap-search-item').forEach(item => {
-        item.addEventListener('mousedown', (e) => {
-          e.preventDefault(); // prevent blur
-          postMsg({
-            type: 'apply-swap-from-search',
-            componentIdOrKey: item.dataset.applySwap,
-            propertyName: item.dataset.applyProp,
-            instanceId: item.dataset.applyInstance || null,
-            bulkComponentName: item.dataset.applyComponent || null,
-          });
-        });
-      });
+      bindSwapResultClicks(resultsDiv);
     }
 
     if (msg.type === 'swap-options') {
