@@ -1478,6 +1478,33 @@ pixso.ui.on("message", (msg: any) => {
       }
     }
 
+    // ── Collect preferred value keys (if any) ──
+    let prefKeys: string[] = [];
+    if (sel && sel.length > 0) {
+      const stack: SceneNode[] = [...sel];
+      while (stack.length > 0 && prefKeys.length === 0) {
+        const node = stack.pop()!;
+        if (isInstanceNode(node)) {
+          const mc = node.mainComponent;
+          if (mc) {
+            let defs: ComponentPropertyDefinitions | null = null;
+            const p = mc.parent;
+            if (p && p.type === "COMPONENT_SET") {
+              defs = (p as ComponentSetNode).componentPropertyDefinitions;
+            } else {
+              defs = mc.componentPropertyDefinitions;
+            }
+            if (defs && defs[propertyName] && (defs[propertyName] as any).preferredValues) {
+              prefKeys = ((defs[propertyName] as any).preferredValues as any[]).map((pv: any) => pv.key);
+            }
+          }
+        }
+        if (prefKeys.length === 0 && hasChildren(node)) {
+          for (const c of node.children) stack.push(c);
+        }
+      }
+    }
+
     // ── Build sources list ──
     const sourcesPromise = pixso.getLibraryListAsync().then((libraries) => {
       const sources: { key: string; name: string; type: string }[] = [];
@@ -1514,7 +1541,7 @@ pixso.ui.on("message", (msg: any) => {
       if (!currentComp.remote) {
         // ── FAST PATH: local component — skip all async, respond immediately ──
         // Sources list will arrive later; navigateTo is enough to start rendering
-        pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources: [{ key: "__local__", name: "Local components", type: "local" }], navigateTo: nav });
+        pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources: [{ key: "__local__", name: "Local components", type: "local" }], navigateTo: nav, prefKeys });
         // Backfill full sources list in background
         sourcesPromise.then((sources) => {
           pixso.ui.postMessage({ type: "swap-picker-sources-update", sources });
@@ -1531,12 +1558,12 @@ pixso.ui.on("message", (msg: any) => {
           .catch(() => {});
 
         Promise.all([sourcesPromise, libInfoPromise]).then(([sources]) => {
-          pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, navigateTo: nav });
+          pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, navigateTo: nav, prefKeys });
         });
       }
     } else {
       sourcesPromise.then((sources) => {
-        pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, navigateTo: null });
+        pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, navigateTo: null, prefKeys });
       });
     }
   }

@@ -1716,6 +1716,7 @@
       history: [],
       sources: null,
       libraryCache: persistentLibraryCache,
+      prefKeys: [],
       searchResults: null,
       selectedSource: null,
       currentFolder: null,
@@ -1976,14 +1977,78 @@
     requestVisibleThumbnails();
   }
 
+  // Resolve preferred value keys to {key, name, id, thumbnailUrl} from persistent cache
+  function resolvePreferredFromCache(prefKeys) {
+    const resolved = [];
+    const keySet = new Set(prefKeys);
+    for (const [, data] of Object.entries(persistentLibraryCache)) {
+      if (!data || !data.folders) continue;
+      for (const folder of data.folders) {
+        for (const comp of folder.components) {
+          if (keySet.has(comp.key) || keySet.has(comp.id)) {
+            resolved.push({ key: comp.key || comp.id, name: comp.name, id: comp.id, thumbnailUrl: comp.thumbnailUrl || '' });
+            keySet.delete(comp.key);
+            keySet.delete(comp.id);
+          }
+          if (comp.variants) {
+            for (const v of comp.variants) {
+              if (keySet.has(v.key) || keySet.has(v.id)) {
+                resolved.push({ key: v.key || v.id, name: comp.name + ' / ' + v.name, id: v.id, thumbnailUrl: v.thumbnailUrl || '' });
+                keySet.delete(v.key);
+                keySet.delete(v.id);
+              }
+            }
+          }
+          if (keySet.size === 0) return { resolved, unresolved: [] };
+        }
+      }
+    }
+    return { resolved, unresolved: Array.from(keySet) };
+  }
+
+  function renderPickerQuickSwap() {
+    const s = swapPickerState;
+    if (!s || !s.prefKeys || s.prefKeys.length === 0) return '';
+    const { resolved } = resolvePreferredFromCache(s.prefKeys);
+    if (resolved.length === 0) return '';
+
+    let html = `<div class="swap-picker-section"><div class="swap-picker-section-title">Quick swap</div>`;
+    for (const item of resolved) {
+      let thumb;
+      if (item.thumbnailUrl) {
+        thumb = `<img class="swap-thumb" src="${escAttr(item.thumbnailUrl)}" onerror="this.style.display='none'" />`;
+      } else if (item.id && thumbnailCache[item.id]) {
+        thumb = `<img class="swap-thumb" src="${thumbnailCache[item.id]}" />`;
+      } else if (item.id) {
+        thumb = `<div class="swap-thumb-loading" data-thumb-id="${escAttr(item.id)}"></div>`;
+      } else {
+        thumb = `<div class="swap-thumb-placeholder"><i class="hgi-stroke hgi-diamond" style="font-size:14px"></i></div>`;
+      }
+      const isCurrent = s.currentValue && (item.key === s.currentValue || item.id === s.currentValue);
+      html += `<div class="swap-component-item ${isCurrent ? 'current' : ''}" data-picker-apply="${escAttr(item.key)}">
+        ${thumb}
+        <div class="swap-comp-info"><div class="swap-comp-name">${escHtml(item.name)}</div></div>
+      </div>`;
+    }
+    html += `</div>`;
+    return html;
+  }
+
   function renderSwapPickerBodyContent() {
     if (!swapPickerState) return '';
     const s = swapPickerState;
 
     if (s.searchResults) return renderPickerSearchResults(s.searchResults);
     if (s.level === 'loading') return `<div class="swap-picker-loading"><div class="spinner"></div>Loading...</div>`;
-    if (s.level === 'folders') return renderPickerFolders();
-    if (s.level === 'components') return renderPickerComponents();
+
+    // Show quick swap section at the top if preferred keys exist and we're at folder/component level
+    let quickSwapHtml = '';
+    if (s.prefKeys && s.prefKeys.length > 0 && (s.level === 'folders' || s.level === 'components')) {
+      quickSwapHtml = renderPickerQuickSwap();
+    }
+
+    if (s.level === 'folders') return quickSwapHtml + renderPickerFolders();
+    if (s.level === 'components') return quickSwapHtml + renderPickerComponents();
     if (s.level === 'variants') return renderPickerVariants();
     return '';
   }
@@ -2327,6 +2392,7 @@
       const s = swapPickerState;
 
       s.sources = msg.sources;
+      s.prefKeys = msg.prefKeys || [];
 
       // If already navigated from cache, just update the sources dropdown — don't re-render
       if (s.navigatedFromCache) {
