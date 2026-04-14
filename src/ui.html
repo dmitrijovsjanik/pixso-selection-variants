@@ -2047,7 +2047,7 @@
         thumb = `<div class="swap-thumb-placeholder"><i class="hgi-stroke hgi-diamond" style="font-size:14px"></i></div>`;
       }
       const isCurrent = s.currentValue && (item.key === s.currentValue || item.id === s.currentValue);
-      html += `<div class="swap-component-item ${isCurrent ? 'current' : ''}" data-picker-apply="${escAttr(item.key)}">
+      html += `<div class="swap-component-item ${isCurrent ? 'current' : ''}" data-picker-apply="${escAttr(item.id || item.key)}">
         ${thumb}
         <div class="swap-comp-info"><div class="swap-comp-name">${escHtml(item.name)}</div></div>
       </div>`;
@@ -2192,7 +2192,7 @@
       if (isSet && comp.variants && comp.variants.length > 0) {
         // Apply default variant (first) directly
         const defaultVariant = comp.variants[0];
-        const applyId = defaultVariant.key || defaultVariant.id || comp.key || comp.id;
+        const applyId = defaultVariant.id || defaultVariant.key || comp.id || comp.key;
         const isCurrentSet = s.currentValue && comp.variants.some(v => (v.key === s.currentValue || v.id === s.currentValue));
         html += `<div class="swap-component-item ${isCurrentSet ? 'current' : ''}" data-picker-apply="${escAttr(applyId)}">
           ${thumb}
@@ -2203,7 +2203,7 @@
         </div>`;
       } else {
         const isCurrentComp = s.currentValue && (comp.key === s.currentValue || comp.id === s.currentValue);
-        html += `<div class="swap-component-item ${isCurrentComp ? 'current' : ''}" data-picker-apply="${escAttr(comp.key || comp.id)}">
+        html += `<div class="swap-component-item ${isCurrentComp ? 'current' : ''}" data-picker-apply="${escAttr(comp.id || comp.key)}">
           ${thumb}
           <div class="swap-comp-info"><div class="swap-comp-name">${escHtml(comp.displayName || comp.name)}</div></div>
         </div>`;
@@ -2234,7 +2234,7 @@
         thumb = `<div class="swap-thumb-placeholder">${compSvg}</div>`;
       }
       const isCurrentV = s.currentValue && (v.key === s.currentValue || v.id === s.currentValue);
-      html += `<div class="swap-component-item ${isCurrentV ? 'current' : ''}" data-picker-apply="${escAttr(v.key || v.id)}">
+      html += `<div class="swap-component-item ${isCurrentV ? 'current' : ''}" data-picker-apply="${escAttr(v.id || v.key)}">
         ${thumb}
         <div class="swap-comp-info"><div class="swap-comp-name">${escHtml(v.name)}</div></div>
       </div>`;

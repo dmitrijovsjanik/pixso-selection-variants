@@ -845,25 +845,40 @@ pixso.ui.on("message", (msg: any) => {
   }
 
   if (msg.type === "apply-swap-from-search") {
-    // Apply a swap — setProperties accepts both node IDs and component keys directly
     const { instanceId, propertyName, componentIdOrKey, bulkComponentName } = msg;
 
-    if (bulkComponentName) {
-      const data = analyzeSelectionSync();
-      const targets = data.groupedByComponent[bulkComponentName] ?? [];
-      for (const inst of targets) {
-        const node = pixso.getNodeById(inst.id) as InstanceNode | null;
+    const applySwap = (compId: string) => {
+      if (bulkComponentName) {
+        const data = analyzeSelectionSync();
+        const targets = data.groupedByComponent[bulkComponentName] ?? [];
+        for (const inst of targets) {
+          const node = pixso.getNodeById(inst.id) as InstanceNode | null;
+          if (node && node.type === "INSTANCE") {
+            try { node.setProperties({ [propertyName]: compId }); } catch {}
+          }
+        }
+      } else if (instanceId) {
+        const node = pixso.getNodeById(instanceId) as InstanceNode | null;
         if (node && node.type === "INSTANCE") {
-          try { node.setProperties({ [propertyName]: componentIdOrKey }); } catch {}
+          try { node.setProperties({ [propertyName]: compId }); } catch {}
         }
       }
-    } else if (instanceId) {
-      const node = pixso.getNodeById(instanceId) as InstanceNode | null;
-      if (node && node.type === "INSTANCE") {
-        try { node.setProperties({ [propertyName]: componentIdOrKey }); } catch {}
-      }
+      sendSelectionData();
+    };
+
+    // Try as local node ID first (fast, no async)
+    const localNode = pixso.getNodeById(componentIdOrKey);
+    if (localNode) {
+      applySwap(localNode.id);
+    } else {
+      // Library component — need to import to get a local node ID
+      pixso.importComponentByKeyAsync(componentIdOrKey)
+        .then((comp) => applySwap(comp.id))
+        .catch(() => {
+          console.warn("[Swap] importComponentByKeyAsync failed for:", componentIdOrKey);
+          pixso.notify("Could not swap — component not found", { error: true });
+        });
     }
-    sendSelectionData();
   }
 
   if (msg.type === "get-thumbnails") {
