@@ -1742,7 +1742,8 @@
     renderSwapPicker(); // full re-render to update nav bar
   }
 
-  // Find which folder contains the target component (by key or id) and navigate into it.
+  // Find which folder contains the target component (by key or id) and navigate
+  // into it, including sub-paths derived from "/" in component names.
   function autoNavigateToComponent(s, folders) {
     const targetKey = s.findComponentKey;
     const targetId = s.findComponentId;
@@ -1758,9 +1759,20 @@
         const hit = matches(comp.key, comp.id)
           || (comp.variants && comp.variants.some(v => matches(v.key, v.id)));
         if (hit) {
+          // Navigate into the folder
           s.history.push({ level: 'folders', currentFolder: null, currentSubPath: null, currentSet: null });
           s.level = 'components';
           s.currentFolder = folder.name;
+
+          // Extract sub-path from component name: "Icons / Filled / Arrow" → subPath = "Icons / Filled"
+          const compName = comp.name || '';
+          const lastSlash = compName.lastIndexOf(' / ');
+          if (lastSlash > 0) {
+            const subPath = compName.substring(0, lastSlash);
+            s.history.push({ level: 'components', currentFolder: folder.name, currentSubPath: null, currentSet: null });
+            s.currentSubPath = subPath;
+          }
+
           s.findComponentKey = null;
           s.findComponentId = null;
           return;
