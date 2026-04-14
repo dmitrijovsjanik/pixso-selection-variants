@@ -1014,7 +1014,26 @@ pixso.ui.on("message", (msg: any) => {
         }
       }
 
-      const folders = Object.entries(folderMap).map(([name, components]) => ({
+      // Normalize: if a folder name contains " / ", split into root + sub-path prefix.
+      // "item / Prefix" with comp "Button" → folder "item", comp renamed to "Prefix / Button"
+      // This lets renderPickerComponents handle the hierarchy via its "/" parsing.
+      const normalizedMap: { [name: string]: any[] } = {};
+      for (const [rawName, comps] of Object.entries(folderMap)) {
+        const slashIdx = rawName.indexOf(" / ");
+        if (slashIdx > 0) {
+          const rootFolder = rawName.substring(0, slashIdx);
+          const subPrefix = rawName.substring(slashIdx + 3); // after " / "
+          if (!normalizedMap[rootFolder]) normalizedMap[rootFolder] = [];
+          for (const c of comps) {
+            normalizedMap[rootFolder].push({ ...c, name: subPrefix + " / " + c.name });
+          }
+        } else {
+          if (!normalizedMap[rawName]) normalizedMap[rawName] = [];
+          normalizedMap[rawName].push(...comps);
+        }
+      }
+
+      const folders = Object.entries(normalizedMap).map(([name, components]) => ({
         name,
         components,
       }));
