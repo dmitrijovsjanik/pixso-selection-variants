@@ -1974,7 +1974,18 @@
     for (const comp of folder.components) {
       const name = comp.name;
       // Strip the subPath prefix if we're inside a sub-folder
-      const relativeName = subPath ? (name.startsWith(subPath + ' / ') ? name.slice(subPath.length + 3) : null) : name;
+      // Also include components whose name exactly equals subPath (sibling ComponentSets)
+      let relativeName;
+      if (!subPath) {
+        relativeName = name;
+      } else if (name.startsWith(subPath + ' / ')) {
+        relativeName = name.slice(subPath.length + 3);
+      } else if (name === subPath) {
+        // Exact match — show at this level with last segment as display name
+        relativeName = name.split(' / ').pop();
+      } else {
+        relativeName = null;
+      }
       if (relativeName === null) continue;
 
       const slashIdx = relativeName.indexOf(' / ');
