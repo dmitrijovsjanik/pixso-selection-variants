@@ -131,6 +131,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 8px;
     padding: 8px 12px;
     background: var(--neutral-1);
     cursor: pointer;
@@ -151,6 +152,8 @@
     color: var(--neutral-12);
     display: flex;
     align-items: center;
+    min-width: 0;
+    word-break: break-word;
     gap: 6px;
   }
 
@@ -167,6 +170,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
+    flex-shrink: 0;
   }
 
   .btn-icon {
@@ -426,7 +430,7 @@
   .swap-picker-header {
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: space-between;
     padding: 8px 12px;
     border-bottom: 1px solid var(--neutral-3);
     flex-shrink: 0;
@@ -782,6 +786,8 @@
     cursor: pointer;
     transition: background var(--transition-fast);
     font-family: inherit;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .btn-instances:hover {
@@ -919,8 +925,8 @@
   }
 
   .instance-thumb-shimmer {
-    width: 24px;
-    height: 24px;
+    width: 32px;
+    height: 32px;
     border-radius: var(--radius-sm);
     background: linear-gradient(90deg, var(--neutral-a-2) 25%, var(--neutral-3) 50%, var(--neutral-a-2) 75%);
     background-size: 200% 100%;
@@ -929,8 +935,8 @@
   }
 
   .instance-thumb {
-    width: 24px;
-    height: 24px;
+    width: 32px;
+    height: 32px;
     object-fit: contain;
     border-radius: var(--radius-sm);
     background: var(--neutral-a-2);
@@ -1362,9 +1368,8 @@
       const hiddenIcon = `<span class="hidden-icon" title="All instances hidden"><i class="hgi-stroke hgi-eye-off" style="font-size:14px"></i></span>`;
 
       html += `<div class="component-group">`;
-      html += `<div class="component-header" data-toggle>
+      html += `<div class="component-header">
         <span class="component-name">
-          <span class="collapse-arrow"></span>
           <img class="instance-thumb" data-thumb-id="${escAttr(instances[0]?.id || '')}" src="${firstThumb}" style="${firstThumb ? '' : 'display:none'}" />
           ${!firstThumb ? `<div class="instance-thumb-shimmer" data-thumb-placeholder="${escAttr(instances[0]?.id || '')}"></div>` : ''}
           ${escHtml(compName)}
@@ -1484,9 +1489,8 @@
       const instThumb = thumbnailCache[instances[0]?.id] || '';
 
       html += `<div class="component-group">`;
-      html += `<div class="component-header" data-toggle>
+      html += `<div class="component-header">
         <span class="component-name">
-          <span class="collapse-arrow"></span>
           <img class="instance-thumb" data-thumb-id="${escAttr(instances[0]?.id || '')}" src="${instThumb}" style="${instThumb ? '' : 'display:none'}" />
           ${!instThumb ? `<div class="instance-thumb-shimmer" data-thumb-placeholder="${escAttr(instances[0]?.id || '')}"></div>` : ''}
           ${escHtml(compName)}
@@ -1887,10 +1891,10 @@
 
     // Close bar — always visible at top
     let html = `<div class="swap-picker-header" id="swap-picker-close">
+      <span class="swap-picker-title">Component picker</span>
       <span class="go-up-icon">
-        <i class="hgi-stroke hgi-arrow-up-01" style="font-size:12px"></i>
+        <i class="hgi-stroke hgi-cancel-01" style="font-size:14px"></i>
       </span>
-      <span class="swap-picker-title">Close component picker</span>
     </div>`;
 
     html += `<div class="swap-picker-search">
@@ -1902,7 +1906,7 @@
     if (s.history.length > 0) {
       html += `<div class="swap-picker-nav" id="swap-picker-back">
         <span class="go-up-icon">
-          <i class="hgi-stroke hgi-arrow-left-01" style="font-size:12px"></i>
+          <i class="hgi-stroke hgi-arrow-up-01" style="font-size:12px"></i>
         </span>
         <span class="go-up-label">${escHtml(title)}</span>
       </div>`;
@@ -2400,8 +2404,12 @@
         persistentLibraryCache[msg.libraryKey] = { folders: msg.folders };
         if (swapPickerState.findComponentKey && swapPickerState.level === 'folders') {
           autoNavigateToComponent(swapPickerState, msg.folders);
+          renderSwapPicker();
+        } else if (swapPickerState.level === 'folders') {
+          // Only re-render if still waiting at folders level
+          renderSwapPickerBody();
         }
-        renderSwapPicker();
+        // If already navigated deeper (components/variants), don't re-render
       }
     }
 
@@ -2411,8 +2419,11 @@
         persistentLibraryCache['__local__'] = { folders: msg.folders };
         if (swapPickerState.findComponentKey && swapPickerState.level === 'folders' && swapPickerState.selectedSource === '__local__') {
           autoNavigateToComponent(swapPickerState, msg.folders);
+          renderSwapPicker();
+        } else if (swapPickerState.level === 'folders') {
+          renderSwapPickerBody();
         }
-        renderSwapPicker();
+        // If already navigated deeper, don't re-render
 
         // Request thumbnails for local components (first 30)
         const ids = [];
