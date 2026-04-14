@@ -1920,6 +1920,7 @@
     searchInput.focus();
 
     bindPickerClicks();
+    requestVisibleThumbnails();
   }
 
   function renderSwapPickerBodyContent() {
@@ -1940,6 +1941,22 @@
     if (!body) return;
     body.innerHTML = renderSwapPickerBodyContent();
     bindPickerClicks();
+    requestVisibleThumbnails();
+  }
+
+  // Request thumbnails for any visible components that don't have one yet
+  function requestVisibleThumbnails() {
+    const els = document.querySelectorAll('.swap-thumb-loading[data-thumb-id]');
+    const ids = [];
+    els.forEach(el => {
+      const id = el.dataset.thumbId;
+      if (id && !thumbnailCache[id] && ids.length < 20) {
+        ids.push(id);
+      }
+    });
+    if (ids.length > 0) {
+      postMsg({ type: 'get-thumbnails', nodeIds: ids });
+    }
   }
 
   function renderPickerFolders() {
