@@ -890,7 +890,6 @@ pixso.ui.on("message", (msg: any) => {
   if (msg.type === "get-thumbnails") {
     // Export small PNG thumbnails for given node IDs
     const { nodeIds } = msg;
-    const results: { id: string; dataUrl: string }[] = [];
 
     Promise.all(
       (nodeIds as string[]).map(async (id) => {
@@ -1369,6 +1368,233 @@ pixso.ui.on("message", (msg: any) => {
       } else {
         pixso.ui.postMessage({ type: "preferred-swap-values", propertyName, values: [] });
       }
+    }
+  }
+
+  if (msg.type === "open-swap-picker") {
+    // Combined handler: replaces get-swap-sources + get-preferred-swap-values
+    // Returns everything in one atomic response to eliminate race conditions.
+    const { propertyName } = msg;
+    const sel = pixso.currentPage.selection;
+
+    // ── 1. Collect preferred value keys ──
+    let prefKeys: string[] = [];
+    if (sel && sel.length > 0) {
+      const stack: SceneNode[] = [...sel];
+      while (stack.length > 0 && prefKeys.length === 0) {
+        const node = stack.pop()!;
+        if (isInstanceNode(node)) {
+          const mc = node.mainComponent;
+          if (mc) {
+            let defs: ComponentPropertyDefinitions | null = null;
+            const p = mc.parent;
+            if (p && p.type === "COMPONENT_SET") {
+              defs = (p as ComponentSetNode).componentPropertyDefinitions;
+            } else {
+              defs = mc.componentPropertyDefinitions;
+            }
+            if (defs && defs[propertyName] && (defs[propertyName] as any).preferredValues) {
+              prefKeys = ((defs[propertyName] as any).preferredValues as any[]).map((pv: any) => pv.key);
+            }
+          }
+        }
+        if (prefKeys.length === 0 && hasChildren(node)) {
+          for (const c of node.children) stack.push(c);
+        }
+      }
+    }
+
+    // ── 2. Find current swap component ──
+    function findCurrentSwapCompCombined(): ComponentNode | null {
+      if (!sel || sel.length === 0) return null;
+      function searchInNode(node: SceneNode): ComponentNode | null {
+        if ("componentPropertyReferences" in node) {
+          const refs = (node as any).componentPropertyReferences;
+          if (refs && refs.mainComponent === propertyName && isInstanceNode(node)) {
+            return node.mainComponent;
+          }
+        }
+        if (hasChildren(node)) {
+          for (const child of node.children) {
+            const found = searchInNode(child);
+            if (found) return found;
+          }
+        }
+        return null;
+      }
+      for (const node of sel) {
+        const found = searchInNode(node);
+        if (found) return found;
+      }
+      return null;
+    }
+
+    let currentComp = findCurrentSwapCompCombined();
+    // Fallback: try componentProperties value via getNodeById
+    if (!currentComp && sel && sel.length > 0) {
+      for (const node of sel) {
+        if (isInstanceNode(node)) {
+          const cp = node.componentProperties;
+          if (cp && cp[propertyName] && cp[propertyName].type === "INSTANCE_SWAP") {
+            const val = cp[propertyName].value as string;
+            const valNode = pixso.getNodeById(val);
+            if (valNode) {
+              if (valNode.type === "COMPONENT") currentComp = valNode as ComponentNode;
+              else if (valNode.type === "INSTANCE") currentComp = (valNode as InstanceNode).mainComponent;
+            }
+            break;
+          }
+        }
+      }
+    }
+
+    const currentKeyInPreferred = currentComp && prefKeys.length > 0
+      ? prefKeys.includes(currentComp.key)
+      : false;
+    const shouldShowQuickSwap = prefKeys.length > 0 && currentKeyInPreferred;
+
+    // ── 3. Build sources list ──
+    const sourcesPromise = pixso.getLibraryListAsync().then((libraries) => {
+      const sources: { key: string; name: string; type: string }[] = [];
+      let hasLocal = false;
+      function checkLocal(node: BaseNode) {
+        if (hasLocal) return;
+        if ("type" in node) {
+          if (node.type === "COMPONENT" || node.type === "COMPONENT_SET") { hasLocal = true; return; }
+          if ("children" in node && node.type !== "INSTANCE") {
+            for (const child of (node as any).children) { checkLocal(child); if (hasLocal) return; }
+          }
+        }
+      }
+      checkLocal(pixso.currentPage);
+      if (hasLocal) sources.push({ key: "__local__", name: "Local components", type: "local" });
+      for (const lib of libraries) {
+        if (lib.subscribed) sources.push({ key: lib.key, name: lib.name, type: "library" });
+      }
+      return sources;
+    });
+
+    if (shouldShowQuickSwap) {
+      // ── Quick swap path: resolve preferred values ──
+      const keySet = new Set(prefKeys);
+      const values: { id: string; name: string; thumbnailDataUrl: string }[] = [];
+      const fileKey = pixso.fileKey;
+
+      const prefValuesPromise = currentComp!.getLibraryInfoAsync().then(async (libInfo) => {
+        const isCurrentFile = libInfo && fileKey && libInfo.key === fileKey;
+
+        // Search the component's own library first (unless it's the current file)
+        if (libInfo && libInfo.key && !isCurrentFile) {
+          try {
+            const assets = await pixso.getLibraryByKeyAsync(libInfo.key);
+            for (const comp of assets.componentList) {
+              if (comp.type === "COMPONENT_SET") {
+                if (keySet.has(comp.key)) {
+                  const first = comp.variants[0];
+                  values.push({ id: first?.key || comp.key, name: comp.name, thumbnailDataUrl: comp.thumbnailUrl || "" });
+                  keySet.delete(comp.key);
+                }
+                for (const v of comp.variants) {
+                  if (keySet.has(v.key)) {
+                    values.push({ id: v.key, name: comp.name + " / " + v.name, thumbnailDataUrl: v.thumbnailUrl || "" });
+                    keySet.delete(v.key);
+                  }
+                }
+              } else if (keySet.has(comp.key)) {
+                values.push({ id: comp.key, name: comp.name, thumbnailDataUrl: comp.thumbnailUrl || "" });
+                keySet.delete(comp.key);
+              }
+            }
+          } catch {}
+        }
+
+        // Search remaining keys in other subscribed libraries
+        if (keySet.size > 0) {
+          try {
+            const libraries = await pixso.getLibraryListAsync();
+            for (const lib of libraries) {
+              if (!lib.subscribed || keySet.size === 0) continue;
+              if (fileKey && lib.key === fileKey) continue;
+              if (libInfo && lib.key === libInfo.key) continue;
+              try {
+                const assets = await pixso.getLibraryByKeyAsync(lib.key);
+                for (const comp of assets.componentList) {
+                  if (comp.type === "COMPONENT_SET") {
+                    for (const v of comp.variants) {
+                      if (keySet.has(v.key)) {
+                        values.push({ id: v.key, name: comp.name + " / " + v.name, thumbnailDataUrl: v.thumbnailUrl || "" });
+                        keySet.delete(v.key);
+                      }
+                    }
+                  } else if (keySet.has(comp.key)) {
+                    values.push({ id: comp.key, name: comp.name, thumbnailDataUrl: comp.thumbnailUrl || "" });
+                    keySet.delete(comp.key);
+                  }
+                  if (keySet.size === 0) break;
+                }
+              } catch {}
+            }
+          } catch {}
+        }
+
+        // For keys still missing — search local pages
+        if (keySet.size > 0) {
+          for (const page of pixso.root.children) {
+            if (keySet.size === 0) break;
+            const stack: BaseNode[] = [page];
+            while (stack.length > 0 && keySet.size > 0) {
+              const node = stack.pop()!;
+              if ("type" in node && node.type === "COMPONENT" && "key" in node) {
+                const comp = node as ComponentNode;
+                if (keySet.has(comp.key)) {
+                  const displayName = comp.parent?.type === "COMPONENT_SET"
+                    ? comp.parent.name + " / " + comp.name : comp.name;
+                  values.push({ id: comp.id, name: displayName, thumbnailDataUrl: "" });
+                  keySet.delete(comp.key);
+                }
+              }
+              if ("children" in node && (node as any).type !== "INSTANCE") {
+                for (const c of (node as any).children) stack.push(c);
+              }
+            }
+          }
+        }
+
+        return values;
+      }).catch(() => [] as { id: string; name: string; thumbnailDataUrl: string }[]);
+
+      Promise.all([sourcesPromise, prefValuesPromise]).then(([sources, preferredValues]) => {
+        pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, preferredValues, navigateTo: null });
+      });
+
+    } else if (currentComp) {
+      // ── Navigate to component's location ──
+      const mcP = currentComp.parent;
+      const compName = (mcP && mcP.type === "COMPONENT_SET") ? mcP.name : currentComp.name;
+      const nav: any = {
+        componentKey: currentComp.key,
+        componentName: compName,
+        containerName: (currentComp as any).containerName || "",
+        pageName: (currentComp as any).pageName || "",
+        remote: currentComp.remote,
+      };
+
+      const libInfoPromise = currentComp.getLibraryInfoAsync()
+        .then((libInfo) => {
+          if (libInfo && libInfo.key) nav.libraryKey = libInfo.key;
+          if (libInfo && libInfo.name) nav.libraryName = libInfo.name;
+        })
+        .catch(() => {});
+
+      Promise.all([sourcesPromise, libInfoPromise]).then(([sources]) => {
+        pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, preferredValues: [], navigateTo: nav });
+      });
+
+    } else {
+      // ── No current component — just show sources ──
+      sourcesPromise.then((sources) => {
+        pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, preferredValues: [], navigateTo: null });
+      });
     }
   }
 

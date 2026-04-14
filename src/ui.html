@@ -1705,8 +1705,7 @@
       currentSet: null,
     };
     renderSwapPicker();
-    postMsg({ type: 'get-swap-sources' });
-    postMsg({ type: 'get-preferred-swap-values', propertyName });
+    postMsg({ type: 'open-swap-picker', propertyName });
   }
 
   function closeSwapPicker() {
@@ -2215,105 +2214,76 @@
 
     // ─── Swap Picker messages ───
 
-    if (msg.type === 'swap-sources') {
-      if (swapPickerState) {
-        swapPickerState.sources = msg.sources;
-        // Update the source dropdown
-        const selectEl = document.getElementById('swap-source-select');
-        if (selectEl) {
-          const hasQS = swapPickerState.preferredValues && swapPickerState.preferredValues.length > 0;
-          let opts = hasQS ? `<option value="__quickswap__">Quick swap</option>` : '';
-          for (const src of msg.sources) {
-            opts += `<option value="${escAttr(src.key)}">${escHtml(src.name)}</option>`;
-          }
-          selectEl.innerHTML = opts;
-          selectEl.value = swapPickerState.selectedSource;
+    if (msg.type === 'swap-picker-data') {
+      // Atomic response: replaces swap-sources + preferred-swap-values
+      if (!swapPickerState || swapPickerState.propertyName !== msg.propertyName) return;
+      const s = swapPickerState;
+
+      s.sources = msg.sources;
+      s.preferredValues = msg.preferredValues;
+
+      if (msg.navigateTo && msg.preferredValues.length === 0) {
+        // Navigate to the current component's location in the library
+        const nav = msg.navigateTo;
+        const compName = nav.componentName || '';
+
+        let subPath = null;
+        if (compName.includes(' / ')) {
+          const parts = compName.split(' / ');
+          parts.pop();
+          subPath = parts.join(' / ');
         }
 
-      }
-    }
+        let sourceKey = nav.libraryKey || '__local__';
+        // If the libraryKey is not in the sources list (e.g. unsubscribed), add it
+        if (sourceKey !== '__local__' && !msg.sources.find(src => src.key === sourceKey)) {
+          s.sources = [...msg.sources, { key: sourceKey, name: nav.libraryName || 'Library', type: 'library' }];
+        }
 
-    if (msg.type === 'preferred-swap-values') {
-      if (swapPickerState && swapPickerState.propertyName === msg.propertyName) {
-        swapPickerState.preferredValues = msg.values;
+        const folderName = nav.containerName || nav.pageName || '';
 
-        // If navigateTo is provided and values are empty — navigate to component's location
-        if (msg.navigateTo && msg.values.length === 0 && swapPickerState.level === 'quickswap') {
-          const nav = msg.navigateTo;
-          const compName = nav.componentName || '';
+        s.currentValue = nav.componentKey;
+        s.findComponentKey = nav.componentKey;
+        s.findComponentSubPath = subPath;
+        s.selectedSource = sourceKey;
+        s.navigateToFolder = folderName;
+        s.navigateToSubPath = subPath;
+        s.level = 'folders';
 
-          // Compute sub-path from component name (slashes = folder hierarchy)
-          let subPath = null;
-          if (compName.includes(' / ')) {
-            const parts = compName.split(' / ');
-            parts.pop();
-            subPath = parts.join(' / ');
-          }
-
-          // Determine which source to use
-          let sourceKey = '__local__';
-          if (nav.libraryKey) {
-            sourceKey = nav.libraryKey;
-          }
-
-          // Use containerName from component metadata as folder
-          const folderName = nav.containerName || nav.pageName || '';
-
-          // Store for matching
-          swapPickerState.currentValue = nav.componentKey;
-          swapPickerState.findComponentKey = nav.componentKey;
-          swapPickerState.findComponentSubPath = subPath;
-
-          // Set source and load if needed
-          swapPickerState.selectedSource = sourceKey;
-          swapPickerState.navigateToFolder = folderName;
-          swapPickerState.navigateToSubPath = subPath;
-          swapPickerState.level = 'folders';
-
-          // Update dropdown
-          const selectEl = document.getElementById('swap-source-select');
-          if (selectEl) selectEl.value = sourceKey;
-
-          if (!swapPickerState.libraryCache[sourceKey]) {
-            if (sourceKey === '__local__') {
-              postMsg({ type: 'get-local-components' });
-            } else {
-              postMsg({ type: 'get-library-contents', libraryKey: sourceKey });
-            }
+        if (!s.libraryCache[sourceKey]) {
+          if (sourceKey === '__local__') {
+            postMsg({ type: 'get-local-components' });
           } else {
-            // Already cached — navigate directly
-            if (folderName) {
-              swapPickerState.history.push({ level: 'folders', currentFolder: null, currentSubPath: null, currentSet: null });
-              swapPickerState.level = 'components';
-              swapPickerState.currentFolder = folderName;
-              if (subPath) {
-                swapPickerState.history.push({ level: 'components', currentFolder: folderName, currentSubPath: null, currentSet: null });
-                swapPickerState.currentSubPath = subPath;
-              }
+            postMsg({ type: 'get-library-contents', libraryKey: sourceKey });
+          }
+        } else {
+          // Already cached — navigate directly
+          if (folderName) {
+            s.history.push({ level: 'folders', currentFolder: null, currentSubPath: null, currentSet: null });
+            s.level = 'components';
+            s.currentFolder = folderName;
+            if (subPath) {
+              s.history.push({ level: 'components', currentFolder: folderName, currentSubPath: null, currentSet: null });
+              s.currentSubPath = subPath;
             }
           }
-          renderSwapPicker();
-        } else if (msg.values.length === 0 && !msg.navigateTo && swapPickerState.level === 'quickswap') {
-          // No quick swap, no navigateTo — go to first source
-          if (swapPickerState.sources && swapPickerState.sources.length > 0) {
-            const first = swapPickerState.sources[0];
-            swapPickerState.selectedSource = first.key;
-            swapPickerState.level = 'folders';
-            const selectEl = document.getElementById('swap-source-select');
-            if (selectEl) selectEl.value = first.key;
-            if (!swapPickerState.libraryCache[first.key]) {
-              if (first.type === 'local') {
-                postMsg({ type: 'get-local-components' });
-              } else {
-                postMsg({ type: 'get-library-contents', libraryKey: first.key });
-              }
-            }
+        }
+
+      } else if (msg.preferredValues.length === 0) {
+        // No preferred values, no navigateTo — go to the first available source
+        if (msg.sources.length > 0) {
+          const first = msg.sources[0];
+          s.selectedSource = first.key;
+          s.level = 'folders';
+          if (!s.libraryCache[first.key]) {
+            if (first.type === 'local') postMsg({ type: 'get-local-components' });
+            else postMsg({ type: 'get-library-contents', libraryKey: first.key });
           }
-          renderSwapPickerBody();
-        } else if (swapPickerState.level === 'quickswap') {
-          renderSwapPickerBody();
         }
       }
+      // else: preferredValues has items → level stays 'quickswap', body re-renders with values
+
+      renderSwapPicker();
     }
 
     if (msg.type === 'library-contents') {
