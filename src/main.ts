@@ -902,9 +902,11 @@ pixso.ui.on("message", (msg: any) => {
             } as ExportSettingsImage);
             const base64 = pixso.base64Encode(bytes);
             return { id, dataUrl: `data:image/png;base64,${base64}` };
+          } else {
+            console.warn("[Thumbnails] node not found or not exportable:", id, node?.type);
           }
-        } catch {
-          // skip
+        } catch (e) {
+          console.warn("[Thumbnails] exportAsync failed for:", id, e);
         }
         return null;
       })
@@ -1498,7 +1500,6 @@ pixso.ui.on("message", (msg: any) => {
     });
 
     if (currentComp) {
-      // Build navigateTo — all sync fields are already on the ComponentNode
       const mcP = currentComp.parent;
       const compName = (mcP && mcP.type === "COMPONENT_SET") ? mcP.name : currentComp.name;
       const nav: any = {
@@ -1509,22 +1510,31 @@ pixso.ui.on("message", (msg: any) => {
         pageName: (currentComp as any).pageName || "",
         remote: currentComp.remote,
       };
-      // libraryKey is async — add 5s timeout so it never hangs
-      const libInfoPromise = withTimeout(currentComp.getLibraryInfoAsync(), 5000, null)
-        .then((libInfo) => {
-          // Never use the current file's own key — getLibraryByKeyAsync rejects it
-          if (libInfo && libInfo.key && libInfo.key !== pixso.fileKey) {
-            nav.libraryKey = libInfo.key;
-            nav.libraryName = libInfo.name;
-          }
-        })
-        .catch(() => {});
 
-      Promise.all([sourcesPromise, libInfoPromise]).then(([sources]) => {
-        pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, navigateTo: nav });
-      });
+      if (!currentComp.remote) {
+        // ── FAST PATH: local component — skip all async, respond immediately ──
+        // Sources list will arrive later; navigateTo is enough to start rendering
+        pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources: [{ key: "__local__", name: "Local components", type: "local" }], navigateTo: nav });
+        // Backfill full sources list in background
+        sourcesPromise.then((sources) => {
+          pixso.ui.postMessage({ type: "swap-picker-sources-update", sources });
+        });
+      } else {
+        // ── Remote component — need libraryKey from async call ──
+        const libInfoPromise = withTimeout(currentComp.getLibraryInfoAsync(), 5000, null)
+          .then((libInfo) => {
+            if (libInfo && libInfo.key && libInfo.key !== pixso.fileKey) {
+              nav.libraryKey = libInfo.key;
+              nav.libraryName = libInfo.name;
+            }
+          })
+          .catch(() => {});
+
+        Promise.all([sourcesPromise, libInfoPromise]).then(([sources]) => {
+          pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, navigateTo: nav });
+        });
+      }
     } else {
-      // No current component — just show the sources list for manual browsing
       sourcesPromise.then((sources) => {
         pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, navigateTo: null });
       });

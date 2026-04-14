@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="stylesheet" href="https://cdn.hugeicons.com/font/hgi-stroke-rounded.css" />
 <style>
   /* ─── fast.ui.kit tokens ─── */
   :root {
@@ -408,6 +409,9 @@
     margin-left: 2px;
   }
 
+  /* ─── Hugeicons overrides ─── */
+  .hgi-stroke { font-size: inherit; vertical-align: middle; }
+
   /* ─── Swap Picker Panel ─── */
   .swap-picker {
     position: fixed;
@@ -589,6 +593,7 @@
     align-items: center;
     gap: 8px;
     padding: 6px 12px;
+    border-left: 2px solid transparent;
     cursor: pointer;
     transition: background var(--transition-fast);
   }
@@ -913,6 +918,16 @@
     flex-shrink: 0;
   }
 
+  .instance-thumb-shimmer {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(90deg, var(--neutral-a-2) 25%, var(--neutral-3) 50%, var(--neutral-a-2) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    flex-shrink: 0;
+  }
+
   .instance-thumb {
     width: 24px;
     height: 24px;
@@ -1049,7 +1064,7 @@
 
 <div id="go-up-bar" class="go-up-bar disabled">
   <span class="go-up-icon">
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 15l-6-6-6 6"/></svg>
+    <i class="hgi-stroke hgi-arrow-up-01" style="font-size:12px"></i>
   </span>
   <span class="go-up-label">Top level — no parent</span>
 </div>
@@ -1075,6 +1090,8 @@
 
   // ─── Swap Picker State ───
   let swapPickerState = null;
+  // Persistent cache — survives across picker open/close cycles
+  let persistentLibraryCache = {};
   // When active: { propertyName, instanceId, componentName, level, history[], sources, libraryCache, preferredValues, searchResults }
   // level: "sources" | "folders" | "components" | "variants"
 
@@ -1104,10 +1121,7 @@
   function renderEmpty(message) {
     return `
       <div class="empty-state">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <rect x="3" y="3" width="18" height="18" rx="2"/>
-          <path d="M9 9l6 6M15 9l-6 6"/>
-        </svg>
+        <i class="hgi-stroke hgi-cursor-01" style="font-size:40px"></i>
         <p>${message}</p>
       </div>`;
   }
@@ -1231,9 +1245,9 @@
           <span class="property-label" title="${escAttr(prop.name)}">${escHtml(clean)}</span>
           <div class="property-control">
             <span class="instance-swap-select" data-open-swap-search ${swapData} ${currentValAttr} title="${escAttr(displayName)}">
-              <svg class="swap-diamond" width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1L15 8L8 15L1 8Z"/></svg>
+              <i class="hgi-stroke hgi-diamond" style="font-size:10px"></i>
               <span class="swap-select-text">${escHtml(displayName)}</span>
-              <svg class="swap-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+              <i class="hgi-stroke hgi-arrow-down-01 swap-chevron" style="font-size:12px"></i>
             </span>
           </div>
         </div>`;
@@ -1345,23 +1359,24 @@
       const merged = getMergedProperties(instances);
       const firstThumb = thumbnailCache[instances[0]?.id] || '';
       const allHidden = instances.every(i => !i.visible);
-      const hiddenIcon = `<span class="hidden-icon" title="All instances hidden"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></span>`;
+      const hiddenIcon = `<span class="hidden-icon" title="All instances hidden"><i class="hgi-stroke hgi-eye-off" style="font-size:14px"></i></span>`;
 
       html += `<div class="component-group">`;
       html += `<div class="component-header" data-toggle>
         <span class="component-name">
           <span class="collapse-arrow"></span>
           <img class="instance-thumb" data-thumb-id="${escAttr(instances[0]?.id || '')}" src="${firstThumb}" style="${firstThumb ? '' : 'display:none'}" />
+          ${!firstThumb ? `<div class="instance-thumb-shimmer" data-thumb-placeholder="${escAttr(instances[0]?.id || '')}"></div>` : ''}
           ${escHtml(compName)}
           ${allHidden ? hiddenIcon : ''}
         </span>
         <div class="component-actions">
           ${instances.length > 1 ? `<button class="btn-instances" data-open-detail="${escAttr(compName)}">
             ${instances.length} · Edit each
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+            <i class="hgi-stroke hgi-arrow-right-01" style="font-size:12px"></i>
           </button>` : ''}
           <button class="btn-icon" title="Select all instances" data-select-component="${escAttr(compName)}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            <i class="hgi-stroke hgi-grid-view" style="font-size:14px"></i>
           </button>
         </div>
       </div>`;
@@ -1402,7 +1417,7 @@
     // Header with back button
     html += `<div class="detail-header" data-back-to-bulk>
       <span class="go-up-icon">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+        <i class="hgi-stroke hgi-arrow-left-01" style="font-size:12px"></i>
       </span>
       <span class="detail-title">${escHtml(compName)}</span>
       <span class="detail-count">${instances.length} instances</span>
@@ -1417,11 +1432,9 @@
       html += `<div class="detail-instance-header" data-instance-toggle data-click-instance="${escAttr(inst.id)}">
         <span class="collapse-arrow"></span>
         <img class="instance-thumb" data-thumb-id="${escAttr(inst.id)}" src="${thumbSrc}" style="${thumbSrc ? '' : 'display:none'}" />
-        <svg class="detail-instance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ${thumbSrc ? 'style="display:none"' : ''}>
-          <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
-        </svg>
+        <i class="hgi-stroke hgi-diamond detail-instance-icon" style="font-size:14px;color:var(--brand-9);${thumbSrc ? 'display:none' : ''}"></i>
         <span class="detail-instance-name">${escHtml(inst.name)}</span>
-        ${!inst.visible ? `<span class="hidden-icon" title="Hidden layer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></span>` : ''}
+        ${!inst.visible ? `<span class="hidden-icon" title="Hidden layer"><i class="hgi-stroke hgi-eye-off" style="font-size:14px"></i></span>` : ''}
       </div>`;
 
       html += `<div class="detail-instance-body"><div class="properties">`;
@@ -1475,12 +1488,13 @@
         <span class="component-name">
           <span class="collapse-arrow"></span>
           <img class="instance-thumb" data-thumb-id="${escAttr(instances[0]?.id || '')}" src="${instThumb}" style="${instThumb ? '' : 'display:none'}" />
+          ${!instThumb ? `<div class="instance-thumb-shimmer" data-thumb-placeholder="${escAttr(instances[0]?.id || '')}"></div>` : ''}
           ${escHtml(compName)}
         </span>
         <div class="component-actions">
           <span class="component-count">${instances.length}</span>
           <button class="btn-icon" title="Select all" data-select-component="${escAttr(compName)}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            <i class="hgi-stroke hgi-grid-view" style="font-size:14px"></i>
           </button>
         </div>
       </div>`;
@@ -1489,11 +1503,9 @@
       for (const inst of instances) {
         html += `<div class="instance-row" style="--depth: ${inst.depth}" data-click-instance="${escAttr(inst.id)}">`;
         html += `<div class="instance-name">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
-          </svg>
+          <i class="hgi-stroke hgi-diamond icon" style="font-size:14px"></i>
           ${escHtml(inst.name)}
-          ${!inst.visible ? `<span class="hidden-icon" title="Hidden"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></span>` : ''}
+          ${!inst.visible ? `<span class="hidden-icon" title="Hidden"><i class="hgi-stroke hgi-eye-off" style="font-size:12px"></i></span>` : ''}
           ${inst.depth > 0 ? `<span style="color:#bbb;font-size:10px">depth ${inst.depth}</span>` : ''}
         </div>`;
         if (inst.path) {
@@ -1685,10 +1697,10 @@
   // ─── Bind click on swap search result items ───
   // ─── Swap Picker Functions ───
 
-  const chevronSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>`;
-  const folderSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>`;
-  const librarySvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>`;
-  const compSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>`;
+  const chevronSvg = `<i class="hgi-stroke hgi-arrow-right-01" style="font-size:14px"></i>`;
+  const folderSvg = `<i class="hgi-stroke hgi-folder-01" style="font-size:16px"></i>`;
+  const librarySvg = `<i class="hgi-stroke hgi-library" style="font-size:16px"></i>`;
+  const compSvg = `<i class="hgi-stroke hgi-diamond" style="font-size:14px"></i>`;
 
   function openSwapPicker(propertyName, instanceId, componentName, currentValue) {
     swapPickerState = {
@@ -1699,19 +1711,56 @@
       level: 'loading',
       history: [],
       sources: null,
-      libraryCache: {},
+      libraryCache: persistentLibraryCache,
       searchResults: null,
       selectedSource: null,
       currentFolder: null,
       currentSubPath: null,
       currentSet: null,
     };
+
+    // Instant navigation from cache: if we have cached data and a currentValue,
+    // try to find the component and navigate immediately — zero roundtrips.
+    let usedCache = false;
+    if (currentValue && Object.keys(persistentLibraryCache).length > 0) {
+      swapPickerState.findComponentKey = currentValue;
+      swapPickerState.findComponentId = currentValue;
+      for (const [cacheKey, data] of Object.entries(persistentLibraryCache)) {
+        if (data && data.folders) {
+          // Temporarily set source to try navigation
+          swapPickerState.selectedSource = cacheKey;
+          swapPickerState.level = 'folders';
+          swapPickerState.sources = [{ key: cacheKey, name: cacheKey === '__local__' ? 'Local components' : cacheKey, type: cacheKey === '__local__' ? 'local' : 'library' }];
+          autoNavigateToComponent(swapPickerState, data.folders);
+          if (swapPickerState.level === 'components') {
+            // Found it — navigation succeeded, skip re-navigation from sandbox response
+            usedCache = true;
+            swapPickerState.navigatedFromCache = true;
+            break;
+          }
+        }
+      }
+      if (!usedCache) {
+        // Reset to loading state
+        swapPickerState.level = 'loading';
+        swapPickerState.history = [];
+        swapPickerState.selectedSource = null;
+        swapPickerState.currentFolder = null;
+        swapPickerState.currentSubPath = null;
+        swapPickerState.findComponentKey = null;
+        swapPickerState.findComponentId = null;
+      }
+    }
+
+    document.body.style.overflow = 'hidden';
     renderSwapPicker();
+    // Always send to sandbox — for sources update and in case cache is stale
     postMsg({ type: 'open-swap-picker', propertyName });
   }
 
   function closeSwapPicker() {
     swapPickerState = null;
+    document.body.style.overflow = '';
     const el = document.querySelector('.swap-picker');
     if (el) el.remove();
   }
@@ -1839,7 +1888,7 @@
     // Close bar — always visible at top
     let html = `<div class="swap-picker-header" id="swap-picker-close">
       <span class="go-up-icon">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 15l-6-6-6 6"/></svg>
+        <i class="hgi-stroke hgi-arrow-up-01" style="font-size:12px"></i>
       </span>
       <span class="swap-picker-title">Close component picker</span>
     </div>`;
@@ -1853,7 +1902,7 @@
     if (s.history.length > 0) {
       html += `<div class="swap-picker-nav" id="swap-picker-back">
         <span class="go-up-icon">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+          <i class="hgi-stroke hgi-arrow-left-01" style="font-size:12px"></i>
         </span>
         <span class="go-up-label">${escHtml(title)}</span>
       </div>`;
@@ -2203,12 +2252,15 @@
       renderVariantsTab(currentData);
       renderInstancesTab(currentData);
 
-      // Request thumbnails for visible instances (first 20)
-      if (currentData.instances && currentData.instances.length > 0) {
-        const ids = currentData.instances
-          .slice(0, 20)
-          .map(i => i.id)
-          .filter(id => !thumbnailCache[id]);
+      // Request thumbnails for component group headers (one per group — what's actually visible)
+      if (currentData.groupedByComponent) {
+        const ids = [];
+        for (const compName of Object.keys(currentData.groupedByComponent)) {
+          const first = currentData.groupedByComponent[compName][0];
+          if (first && !thumbnailCache[first.id]) {
+            ids.push(first.id);
+          }
+        }
         if (ids.length > 0) {
           postMsg({ type: 'get-thumbnails', nodeIds: ids });
         }
@@ -2216,12 +2268,17 @@
     }
 
     if (msg.type === 'thumbnails') {
+      console.log('[UI] thumbnails received:', Object.keys(msg.thumbnails || {}).length, 'of requested');
+      const matchingEls = document.querySelectorAll('[data-thumb-id]').length;
+      console.log('[UI] data-thumb-id elements in DOM:', matchingEls);
       Object.assign(thumbnailCache, msg.thumbnails || {});
       for (const [id, url] of Object.entries(msg.thumbnails || {})) {
         document.querySelectorAll(`[data-thumb-id="${id}"]`).forEach(el => {
           if (el.tagName === 'IMG') {
             el.src = url;
             el.style.display = 'block';
+            // Remove placeholder icon if present
+            document.querySelectorAll(`[data-thumb-placeholder="${id}"]`).forEach(p => p.remove());
           } else {
             // Replace shimmer div with img
             const img = document.createElement('img');
@@ -2267,6 +2324,21 @@
 
       s.sources = msg.sources;
 
+      // If already navigated from cache, just update the sources dropdown — don't re-render
+      if (s.navigatedFromCache) {
+        s.navigatedFromCache = false;
+        const selectEl = document.getElementById('swap-source-select');
+        if (selectEl) {
+          let opts = '';
+          for (const src of msg.sources) {
+            opts += `<option value="${escAttr(src.key)}" ${s.selectedSource === src.key ? 'selected' : ''}>${escHtml(src.name)}</option>`;
+          }
+          selectEl.innerHTML = opts;
+          selectEl.value = s.selectedSource;
+        }
+        return;
+      }
+
       if (msg.navigateTo) {
         const nav = msg.navigateTo;
 
@@ -2305,9 +2377,27 @@
       renderSwapPicker();
     }
 
+    if (msg.type === 'swap-picker-sources-update') {
+      // Background update: full sources list arrived after fast-path local response
+      if (swapPickerState) {
+        swapPickerState.sources = msg.sources;
+        // Update the dropdown without re-rendering the whole picker
+        const selectEl = document.getElementById('swap-source-select');
+        if (selectEl) {
+          let opts = '';
+          for (const src of msg.sources) {
+            opts += `<option value="${escAttr(src.key)}" ${swapPickerState.selectedSource === src.key ? 'selected' : ''}>${escHtml(src.name)}</option>`;
+          }
+          selectEl.innerHTML = opts;
+          selectEl.value = swapPickerState.selectedSource;
+        }
+      }
+    }
+
     if (msg.type === 'library-contents') {
       if (swapPickerState) {
         swapPickerState.libraryCache[msg.libraryKey] = { folders: msg.folders };
+        persistentLibraryCache[msg.libraryKey] = { folders: msg.folders };
         if (swapPickerState.findComponentKey && swapPickerState.level === 'folders') {
           autoNavigateToComponent(swapPickerState, msg.folders);
         }
@@ -2318,6 +2408,7 @@
     if (msg.type === 'local-contents') {
       if (swapPickerState) {
         swapPickerState.libraryCache['__local__'] = { folders: msg.folders };
+        persistentLibraryCache['__local__'] = { folders: msg.folders };
         if (swapPickerState.findComponentKey && swapPickerState.level === 'folders' && swapPickerState.selectedSource === '__local__') {
           autoNavigateToComponent(swapPickerState, msg.folders);
         }
