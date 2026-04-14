@@ -1848,6 +1848,25 @@
     s.findComponentId = null;
   }
 
+  // Update sources dropdown, preserving Quick swap option
+  function updateSourcesDropdown() {
+    if (!swapPickerState) return;
+    const s = swapPickerState;
+    const selectEl = document.getElementById('swap-source-select');
+    if (!selectEl) return;
+    let opts = '';
+    if (s.prefKeys && s.prefKeys.length > 0) {
+      opts += `<option value="__quickswap__" ${s.selectedSource === '__quickswap__' ? 'selected' : ''}>Quick swap</option>`;
+    }
+    if (s.sources) {
+      for (const src of s.sources) {
+        opts += `<option value="${escAttr(src.key)}" ${s.selectedSource === src.key ? 'selected' : ''}>${escHtml(src.name)}</option>`;
+      }
+    }
+    selectEl.innerHTML = opts;
+    selectEl.value = s.selectedSource;
+  }
+
   function applySwapFromPicker(componentIdOrKey) {
     if (!swapPickerState) return;
     postMsg({
@@ -1884,6 +1903,9 @@
 
     // Source dropdown options
     let sourceOptions = '';
+    if (s.prefKeys && s.prefKeys.length > 0) {
+      sourceOptions += `<option value="__quickswap__" ${s.selectedSource === '__quickswap__' ? 'selected' : ''}>Quick swap</option>`;
+    }
     if (s.sources) {
       for (const src of s.sources) {
         sourceOptions += `<option value="${escAttr(src.key)}" ${s.selectedSource === src.key ? 'selected' : ''}>${escHtml(src.name)}</option>`;
@@ -2008,11 +2030,11 @@
 
   function renderPickerQuickSwap() {
     const s = swapPickerState;
-    if (!s || !s.prefKeys || s.prefKeys.length === 0) return '';
-    const { resolved } = resolvePreferredFromCache(s.prefKeys);
-    if (resolved.length === 0) return '';
+    if (!s || !s.prefKeys || s.prefKeys.length === 0) return `<div class="swap-picker-empty">No preferred values</div>`;
+    const { resolved, unresolved } = resolvePreferredFromCache(s.prefKeys);
 
-    let html = `<div class="swap-picker-section"><div class="swap-picker-section-title">Quick swap</div>`;
+    let html = '';
+    // Resolved items — show with name and thumbnail
     for (const item of resolved) {
       let thumb;
       if (item.thumbnailUrl) {
@@ -2030,7 +2052,13 @@
         <div class="swap-comp-info"><div class="swap-comp-name">${escHtml(item.name)}</div></div>
       </div>`;
     }
-    html += `</div>`;
+    // Unresolved items — show shimmer placeholders (will resolve when cache loads)
+    for (const key of unresolved) {
+      html += `<div class="swap-component-item" data-picker-apply="${escAttr(key)}">
+        <div class="swap-thumb-loading"></div>
+        <div class="swap-comp-info"><div class="swap-comp-name" style="color:var(--neutral-9)">Loading...</div></div>
+      </div>`;
+    }
     return html;
   }
 
@@ -2040,15 +2068,9 @@
 
     if (s.searchResults) return renderPickerSearchResults(s.searchResults);
     if (s.level === 'loading') return `<div class="swap-picker-loading"><div class="spinner"></div>Loading...</div>`;
-
-    // Show quick swap section at the top if preferred keys exist and we're at folder/component level
-    let quickSwapHtml = '';
-    if (s.prefKeys && s.prefKeys.length > 0 && (s.level === 'folders' || s.level === 'components')) {
-      quickSwapHtml = renderPickerQuickSwap();
-    }
-
-    if (s.level === 'folders') return quickSwapHtml + renderPickerFolders();
-    if (s.level === 'components') return quickSwapHtml + renderPickerComponents();
+    if (s.level === 'quickswap') return renderPickerQuickSwap();
+    if (s.level === 'folders') return renderPickerFolders();
+    if (s.level === 'components') return renderPickerComponents();
     if (s.level === 'variants') return renderPickerVariants();
     return '';
   }
@@ -2394,18 +2416,18 @@
       s.sources = msg.sources;
       s.prefKeys = msg.prefKeys || [];
 
-      // If already navigated from cache, just update the sources dropdown — don't re-render
+      // If already navigated from cache, just update sources dropdown + check if we should switch to quick swap
       if (s.navigatedFromCache) {
         s.navigatedFromCache = false;
-        const selectEl = document.getElementById('swap-source-select');
-        if (selectEl) {
-          let opts = '';
-          for (const src of msg.sources) {
-            opts += `<option value="${escAttr(src.key)}" ${s.selectedSource === src.key ? 'selected' : ''}>${escHtml(src.name)}</option>`;
-          }
-          selectEl.innerHTML = opts;
-          selectEl.value = s.selectedSource;
+        // If prefKeys arrived AND current value is in them — switch to quick swap
+        if (s.prefKeys.length > 0 && s.currentValue && s.prefKeys.includes(s.currentValue)) {
+          s.selectedSource = '__quickswap__';
+          s.level = 'quickswap';
+          s.history = [];
+          renderSwapPicker();
+          return;
         }
+        updateSourcesDropdown();
         return;
       }
 
@@ -2413,7 +2435,6 @@
         const nav = msg.navigateTo;
 
         let sourceKey = nav.libraryKey || '__local__';
-        // If libraryKey isn't in the subscribed sources list, add it manually
         if (sourceKey !== '__local__' && !msg.sources.find(src => src.key === sourceKey)) {
           s.sources = [...msg.sources, { key: sourceKey, name: nav.libraryName || 'Library', type: 'library' }];
         }
@@ -2421,6 +2442,23 @@
         s.currentValue = nav.componentKey;
         s.findComponentKey = nav.componentKey;
         s.findComponentId = nav.componentId || null;
+
+        // If preferred values exist AND current component is one of them — show quick swap
+        const currentInPref = s.prefKeys.length > 0 && s.prefKeys.includes(nav.componentKey);
+        if (currentInPref) {
+          s.selectedSource = '__quickswap__';
+          s.level = 'quickswap';
+          // Trigger cache loading in background so items resolve and library browse works
+          if (!s.libraryCache[sourceKey]) {
+            if (sourceKey === '__local__') postMsg({ type: 'get-local-components' });
+            else postMsg({ type: 'get-library-contents', libraryKey: sourceKey });
+          }
+          renderSwapPicker();
+          return;
+        }
+        // If prefKeys exist but current is NOT in them — navigate to component, Quick swap stays in dropdown
+
+        // No preferred values — navigate to component's location
         s.selectedSource = sourceKey;
         s.level = 'folders';
 
@@ -2451,16 +2489,7 @@
       // Background update: full sources list arrived after fast-path local response
       if (swapPickerState) {
         swapPickerState.sources = msg.sources;
-        // Update the dropdown without re-rendering the whole picker
-        const selectEl = document.getElementById('swap-source-select');
-        if (selectEl) {
-          let opts = '';
-          for (const src of msg.sources) {
-            opts += `<option value="${escAttr(src.key)}" ${swapPickerState.selectedSource === src.key ? 'selected' : ''}>${escHtml(src.name)}</option>`;
-          }
-          selectEl.innerHTML = opts;
-          selectEl.value = swapPickerState.selectedSource;
-        }
+        updateSourcesDropdown();
       }
     }
 
@@ -2468,14 +2497,15 @@
       if (swapPickerState) {
         swapPickerState.libraryCache[msg.libraryKey] = { folders: msg.folders };
         persistentLibraryCache[msg.libraryKey] = { folders: msg.folders };
-        if (swapPickerState.findComponentKey && swapPickerState.level === 'folders') {
+        // Re-render quick swap if on it (items may have resolved from new cache)
+        if (swapPickerState.level === 'quickswap') {
+          renderSwapPickerBody();
+        } else if (swapPickerState.findComponentKey && swapPickerState.level === 'folders') {
           autoNavigateToComponent(swapPickerState, msg.folders);
           renderSwapPicker();
         } else if (swapPickerState.level === 'folders') {
-          // Only re-render if still waiting at folders level
           renderSwapPickerBody();
         }
-        // If already navigated deeper (components/variants), don't re-render
       }
     }
 
@@ -2483,13 +2513,14 @@
       if (swapPickerState) {
         swapPickerState.libraryCache['__local__'] = { folders: msg.folders };
         persistentLibraryCache['__local__'] = { folders: msg.folders };
-        if (swapPickerState.findComponentKey && swapPickerState.level === 'folders' && swapPickerState.selectedSource === '__local__') {
+        if (swapPickerState.level === 'quickswap') {
+          renderSwapPickerBody();
+        } else if (swapPickerState.findComponentKey && swapPickerState.level === 'folders' && swapPickerState.selectedSource === '__local__') {
           autoNavigateToComponent(swapPickerState, msg.folders);
           renderSwapPicker();
         } else if (swapPickerState.level === 'folders') {
           renderSwapPickerBody();
         }
-        // If already navigated deeper, don't re-render
 
         // Request thumbnails for local components (first 30)
         const ids = [];
