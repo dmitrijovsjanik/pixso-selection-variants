@@ -1692,14 +1692,13 @@
       propertyName,
       instanceId,
       componentName,
-      currentValue: currentValue || null, // ID of currently selected component
-      level: 'quickswap',
+      currentValue: currentValue || null,
+      level: 'loading',
       history: [],
       sources: null,
       libraryCache: {},
-      preferredValues: null,
       searchResults: null,
-      selectedSource: '__quickswap__',
+      selectedSource: null,
       currentFolder: null,
       currentSubPath: null,
       currentSet: null,
@@ -1778,8 +1777,7 @@
     if (s.level === 'variants' && s.currentSet) title = s.currentSet.name;
 
     // Source dropdown options
-    const hasQuickSwap = s.preferredValues && s.preferredValues.length > 0;
-    let sourceOptions = hasQuickSwap ? `<option value="__quickswap__">Quick swap</option>` : '';
+    let sourceOptions = '';
     if (s.sources) {
       for (const src of s.sources) {
         sourceOptions += `<option value="${escAttr(src.key)}" ${s.selectedSource === src.key ? 'selected' : ''}>${escHtml(src.name)}</option>`;
@@ -1877,7 +1875,7 @@
     const s = swapPickerState;
 
     if (s.searchResults) return renderPickerSearchResults(s.searchResults);
-    if (s.level === 'quickswap') return renderPickerQuickSwap();
+    if (s.level === 'loading') return `<div class="swap-picker-loading"><div class="spinner"></div>Loading...</div>`;
     if (s.level === 'folders') return renderPickerFolders();
     if (s.level === 'components') return renderPickerComponents();
     if (s.level === 'variants') return renderPickerVariants();
@@ -1890,37 +1888,6 @@
     if (!body) return;
     body.innerHTML = renderSwapPickerBodyContent();
     bindPickerClicks();
-  }
-
-  function renderPickerQuickSwap() {
-    const s = swapPickerState;
-
-    if (s.preferredValues === null) {
-      return `<div class="swap-picker-loading"><div class="spinner"></div>Loading quick swap...</div>`;
-    }
-
-    if (s.preferredValues.length === 0) {
-      // Empty quick swap — navigateTo should handle this via message handler
-      // Show loading while navigation happens
-      return `<div class="swap-picker-loading"><div class="spinner"></div>Loading...</div>`;
-    }
-
-    let html = '';
-    for (const pv of s.preferredValues) {
-      let thumb;
-      if (pv.thumbnailDataUrl) {
-        thumb = `<img class="swap-thumb" src="${pv.thumbnailDataUrl}" />`;
-      } else {
-        thumb = `<div class="swap-thumb-loading"></div>`;
-      }
-      const isCurrent = s.currentValue && pv.id === s.currentValue;
-      html += `<div class="swap-component-item ${isCurrent ? 'current' : ''}" data-picker-apply="${escAttr(pv.id)}">
-        ${thumb}
-        <div class="swap-comp-info"><div class="swap-comp-name">${escHtml(pv.name)}</div></div>
-      </div>`;
-    }
-
-    return html;
   }
 
   function renderPickerFolders() {
@@ -2215,27 +2182,16 @@
     // ─── Swap Picker messages ───
 
     if (msg.type === 'swap-picker-data') {
-      // Atomic response: replaces swap-sources + preferred-swap-values
       if (!swapPickerState || swapPickerState.propertyName !== msg.propertyName) return;
       const s = swapPickerState;
 
       s.sources = msg.sources;
-      s.preferredValues = msg.preferredValues;
 
-      if (msg.navigateTo && msg.preferredValues.length === 0) {
-        // Navigate to the current component's location in the library
+      if (msg.navigateTo) {
         const nav = msg.navigateTo;
-        const compName = nav.componentName || '';
-
-        let subPath = null;
-        if (compName.includes(' / ')) {
-          const parts = compName.split(' / ');
-          parts.pop();
-          subPath = parts.join(' / ');
-        }
 
         let sourceKey = nav.libraryKey || '__local__';
-        // If the libraryKey is not in the sources list (e.g. unsubscribed), add it
+        // If libraryKey isn't in the subscribed sources list, add it manually
         if (sourceKey !== '__local__' && !msg.sources.find(src => src.key === sourceKey)) {
           s.sources = [...msg.sources, { key: sourceKey, name: nav.libraryName || 'Library', type: 'library' }];
         }
@@ -2244,33 +2200,23 @@
 
         s.currentValue = nav.componentKey;
         s.findComponentKey = nav.componentKey;
-        s.findComponentSubPath = subPath;
         s.selectedSource = sourceKey;
         s.navigateToFolder = folderName;
-        s.navigateToSubPath = subPath;
         s.level = 'folders';
 
         if (!s.libraryCache[sourceKey]) {
-          if (sourceKey === '__local__') {
-            postMsg({ type: 'get-local-components' });
-          } else {
-            postMsg({ type: 'get-library-contents', libraryKey: sourceKey });
-          }
+          if (sourceKey === '__local__') postMsg({ type: 'get-local-components' });
+          else postMsg({ type: 'get-library-contents', libraryKey: sourceKey });
         } else {
-          // Already cached — navigate directly
+          // Already cached — jump straight to the folder
           if (folderName) {
             s.history.push({ level: 'folders', currentFolder: null, currentSubPath: null, currentSet: null });
             s.level = 'components';
             s.currentFolder = folderName;
-            if (subPath) {
-              s.history.push({ level: 'components', currentFolder: folderName, currentSubPath: null, currentSet: null });
-              s.currentSubPath = subPath;
-            }
           }
         }
-
-      } else if (msg.preferredValues.length === 0) {
-        // No preferred values, no navigateTo — go to the first available source
+      } else {
+        // No current component — show first available source for manual browse
         if (msg.sources.length > 0) {
           const first = msg.sources[0];
           s.selectedSource = first.key;
@@ -2281,7 +2227,6 @@
           }
         }
       }
-      // else: preferredValues has items → level stays 'quickswap', body re-renders with values
 
       renderSwapPicker();
     }

@@ -1372,12 +1372,9 @@ pixso.ui.on("message", (msg: any) => {
   }
 
   if (msg.type === "open-swap-picker") {
-    // Combined handler: replaces get-swap-sources + get-preferred-swap-values
-    // Returns everything in one atomic response to eliminate race conditions.
     const { propertyName } = msg;
     const sel = pixso.currentPage.selection;
 
-    // Helper: wrap a promise with a timeout that resolves to fallback instead of hanging
     function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
       return Promise.race([
         promise,
@@ -1385,35 +1382,8 @@ pixso.ui.on("message", (msg: any) => {
       ]);
     }
 
-    // ── 1. Collect preferred value keys ──
-    let prefKeys: string[] = [];
-    if (sel && sel.length > 0) {
-      const stack: SceneNode[] = [...sel];
-      while (stack.length > 0 && prefKeys.length === 0) {
-        const node = stack.pop()!;
-        if (isInstanceNode(node)) {
-          const mc = node.mainComponent;
-          if (mc) {
-            let defs: ComponentPropertyDefinitions | null = null;
-            const p = mc.parent;
-            if (p && p.type === "COMPONENT_SET") {
-              defs = (p as ComponentSetNode).componentPropertyDefinitions;
-            } else {
-              defs = mc.componentPropertyDefinitions;
-            }
-            if (defs && defs[propertyName] && (defs[propertyName] as any).preferredValues) {
-              prefKeys = ((defs[propertyName] as any).preferredValues as any[]).map((pv: any) => pv.key);
-            }
-          }
-        }
-        if (prefKeys.length === 0 && hasChildren(node)) {
-          for (const c of node.children) stack.push(c);
-        }
-      }
-    }
-
-    // ── 2. Find current swap component ──
-    function findCurrentSwapCompCombined(): ComponentNode | null {
+    // ── Find the component currently set for this swap slot ──
+    function findCurrentSwapComp(): ComponentNode | null {
       if (!sel || sel.length === 0) return null;
       function searchInNode(node: SceneNode): ComponentNode | null {
         if ("componentPropertyReferences" in node) {
@@ -1437,8 +1407,8 @@ pixso.ui.on("message", (msg: any) => {
       return null;
     }
 
-    let currentComp = findCurrentSwapCompCombined();
-    // Fallback: try componentProperties value via getNodeById
+    let currentComp = findCurrentSwapComp();
+    // Fallback: resolve via componentProperties value node ID
     if (!currentComp && sel && sel.length > 0) {
       for (const node of sel) {
         if (isInstanceNode(node)) {
@@ -1456,12 +1426,7 @@ pixso.ui.on("message", (msg: any) => {
       }
     }
 
-    const currentKeyInPreferred = currentComp && prefKeys.length > 0
-      ? prefKeys.includes(currentComp.key)
-      : false;
-    const shouldShowQuickSwap = prefKeys.length > 0 && currentKeyInPreferred;
-
-    // ── 3. Build sources list ──
+    // ── Build sources list ──
     const sourcesPromise = pixso.getLibraryListAsync().then((libraries) => {
       const sources: { key: string; name: string; type: string }[] = [];
       let hasLocal = false;
@@ -1482,121 +1447,8 @@ pixso.ui.on("message", (msg: any) => {
       return sources;
     });
 
-    if (shouldShowQuickSwap) {
-      // ── Quick swap path: resolve preferred values ──
-      const keySet = new Set(prefKeys);
-      const values: { id: string; name: string; thumbnailDataUrl: string }[] = [];
-      const fileKey = pixso.fileKey;
-
-      const prefValuesPromise = withTimeout(currentComp!.getLibraryInfoAsync(), 5000, null).then(async (libInfo) => {
-        const isCurrentFile = libInfo && fileKey && libInfo.key === fileKey;
-
-        // Search the component's own library first (unless it's the current file)
-        if (libInfo && libInfo.key && !isCurrentFile) {
-          try {
-            const assets = await withTimeout(pixso.getLibraryByKeyAsync(libInfo.key), 8000, null);
-            for (const comp of (assets?.componentList ?? [])) {
-              if (comp.type === "COMPONENT_SET") {
-                if (keySet.has(comp.key)) {
-                  const first = comp.variants[0];
-                  values.push({ id: first?.key || comp.key, name: comp.name, thumbnailDataUrl: comp.thumbnailUrl || "" });
-                  keySet.delete(comp.key);
-                }
-                for (const v of comp.variants) {
-                  if (keySet.has(v.key)) {
-                    values.push({ id: v.key, name: comp.name + " / " + v.name, thumbnailDataUrl: v.thumbnailUrl || "" });
-                    keySet.delete(v.key);
-                  }
-                }
-              } else if (keySet.has(comp.key)) {
-                values.push({ id: comp.key, name: comp.name, thumbnailDataUrl: comp.thumbnailUrl || "" });
-                keySet.delete(comp.key);
-              }
-            }
-          } catch {}
-        }
-
-        // Search remaining keys in other subscribed libraries
-        if (keySet.size > 0) {
-          try {
-            const libraries = await withTimeout(pixso.getLibraryListAsync(), 5000, []);
-            for (const lib of libraries) {
-              if (!lib.subscribed || keySet.size === 0) continue;
-              if (fileKey && lib.key === fileKey) continue;
-              if (libInfo && lib.key === libInfo.key) continue;
-              try {
-                const assets = await withTimeout(pixso.getLibraryByKeyAsync(lib.key), 8000, null);
-                for (const comp of (assets?.componentList ?? [])) {
-                  if (comp.type === "COMPONENT_SET") {
-                    for (const v of comp.variants) {
-                      if (keySet.has(v.key)) {
-                        values.push({ id: v.key, name: comp.name + " / " + v.name, thumbnailDataUrl: v.thumbnailUrl || "" });
-                        keySet.delete(v.key);
-                      }
-                    }
-                  } else if (keySet.has(comp.key)) {
-                    values.push({ id: comp.key, name: comp.name, thumbnailDataUrl: comp.thumbnailUrl || "" });
-                    keySet.delete(comp.key);
-                  }
-                  if (keySet.size === 0) break;
-                }
-              } catch {}
-            }
-          } catch {}
-        }
-
-        // For keys still missing — search local pages
-        if (keySet.size > 0) {
-          for (const page of pixso.root.children) {
-            if (keySet.size === 0) break;
-            const stack: BaseNode[] = [page];
-            while (stack.length > 0 && keySet.size > 0) {
-              const node = stack.pop()!;
-              if ("type" in node && node.type === "COMPONENT" && "key" in node) {
-                const comp = node as ComponentNode;
-                if (keySet.has(comp.key)) {
-                  const displayName = comp.parent?.type === "COMPONENT_SET"
-                    ? comp.parent.name + " / " + comp.name : comp.name;
-                  values.push({ id: comp.id, name: displayName, thumbnailDataUrl: "" });
-                  keySet.delete(comp.key);
-                }
-              }
-              if ("children" in node && (node as any).type !== "INSTANCE") {
-                for (const c of (node as any).children) stack.push(c);
-              }
-            }
-          }
-        }
-
-        return values;
-      }).catch(() => [] as { id: string; name: string; thumbnailDataUrl: string }[]);
-
-      Promise.all([sourcesPromise, prefValuesPromise]).then(([sources, preferredValues]) => {
-        // If quick swap resolved to nothing useful (empty, or only the current component),
-        // fall back to navigateTo so the user sees the full library browser.
-        const currentKey = currentComp!.key;
-        const usefulValues = preferredValues.filter(v => v.id !== currentKey);
-        const isTrivial = preferredValues.length === 0 || (preferredValues.length === 1 && preferredValues[0].id === currentKey);
-
-        if (isTrivial) {
-          // Build navigateTo from currentComp directly (no extra async needed)
-          const mcP = currentComp!.parent;
-          const compName = (mcP && mcP.type === "COMPONENT_SET") ? mcP.name : currentComp!.name;
-          const nav: any = {
-            componentKey: currentKey,
-            componentName: compName,
-            containerName: (currentComp as any).containerName || "",
-            pageName: (currentComp as any).pageName || "",
-            remote: currentComp!.remote,
-          };
-          pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, preferredValues: [], navigateTo: nav });
-        } else {
-          pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, preferredValues: usefulValues, navigateTo: null });
-        }
-      });
-
-    } else if (currentComp) {
-      // ── Navigate to component's location ──
+    if (currentComp) {
+      // Build navigateTo — all sync fields are already on the ComponentNode
       const mcP = currentComp.parent;
       const compName = (mcP && mcP.type === "COMPONENT_SET") ? mcP.name : currentComp.name;
       const nav: any = {
@@ -1606,7 +1458,7 @@ pixso.ui.on("message", (msg: any) => {
         pageName: (currentComp as any).pageName || "",
         remote: currentComp.remote,
       };
-
+      // libraryKey is async — add 5s timeout so it never hangs
       const libInfoPromise = withTimeout(currentComp.getLibraryInfoAsync(), 5000, null)
         .then((libInfo) => {
           if (libInfo && libInfo.key) nav.libraryKey = libInfo.key;
@@ -1615,13 +1467,12 @@ pixso.ui.on("message", (msg: any) => {
         .catch(() => {});
 
       Promise.all([sourcesPromise, libInfoPromise]).then(([sources]) => {
-        pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, preferredValues: [], navigateTo: nav });
+        pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, navigateTo: nav });
       });
-
     } else {
-      // ── No current component — just show sources ──
+      // No current component — just show the sources list for manual browsing
       sourcesPromise.then((sources) => {
-        pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, preferredValues: [], navigateTo: null });
+        pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, navigateTo: null });
       });
     }
   }
