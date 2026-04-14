@@ -1024,23 +1024,24 @@ pixso.ui.on("message", (msg: any) => {
   }
 
   if (msg.type === "get-local-components") {
-    const folderMap: { [name: string]: { id: string; name: string; type: string; variants?: { id: string; name: string }[] }[] } = {};
+    const folderMap: { [name: string]: { id: string; key: string; name: string; type: string; variants?: { id: string; key: string; name: string }[] }[] } = {};
 
     function walkForComponents(node: BaseNode, folderName: string) {
       if ("type" in node) {
         if (node.type === "COMPONENT_SET") {
-          const variants = [];
+          const variants: { id: string; key: string; name: string }[] = [];
           if ("children" in node) {
             for (const child of (node as any).children) {
               if (child.type === "COMPONENT") {
-                variants.push({ id: child.id, name: child.name });
+                variants.push({ id: child.id, key: child.key, name: child.name });
               }
             }
           }
           if (!folderMap[folderName]) folderMap[folderName] = [];
           folderMap[folderName].push({
             id: node.id,
-            name: node.name,
+            key: (node as any).key || "",
+            name: (node as any).name,
             type: "COMPONENT_SET",
             variants,
           });
@@ -1051,7 +1052,8 @@ pixso.ui.on("message", (msg: any) => {
             if (!folderMap[folderName]) folderMap[folderName] = [];
             folderMap[folderName].push({
               id: node.id,
-              name: node.name,
+              key: (node as ComponentNode).key,
+              name: (node as any).name,
               type: "COMPONENT",
             });
           }
@@ -1482,6 +1484,7 @@ pixso.ui.on("message", (msg: any) => {
       const compName = (mcP && mcP.type === "COMPONENT_SET") ? mcP.name : currentComp.name;
       const nav: any = {
         componentKey: currentComp.key,
+        componentId: currentComp.id,
         componentName: compName,
         containerName: (currentComp as any).containerName || "",
         pageName: (currentComp as any).pageName || "",

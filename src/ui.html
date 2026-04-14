@@ -1742,27 +1742,34 @@
     renderSwapPicker(); // full re-render to update nav bar
   }
 
-  // Find which folder contains the target component key and navigate into it.
-  // Works for both library (key) and local (id) components.
+  // Find which folder contains the target component (by key or id) and navigate into it.
   function autoNavigateToComponent(s, folders) {
-    const target = s.findComponentKey;
-    if (!target) return;
+    const targetKey = s.findComponentKey;
+    const targetId = s.findComponentId;
+    if (!targetKey && !targetId) return;
+
+    function matches(k, id) {
+      return (targetKey && (k === targetKey || id === targetKey))
+          || (targetId && (k === targetId || id === targetId));
+    }
 
     for (const folder of folders) {
       for (const comp of folder.components) {
-        const match = comp.key === target || comp.id === target
-          || (comp.variants && comp.variants.some(v => v.key === target || v.id === target));
-        if (match) {
+        const hit = matches(comp.key, comp.id)
+          || (comp.variants && comp.variants.some(v => matches(v.key, v.id)));
+        if (hit) {
           s.history.push({ level: 'folders', currentFolder: null, currentSubPath: null, currentSet: null });
           s.level = 'components';
           s.currentFolder = folder.name;
           s.findComponentKey = null;
+          s.findComponentId = null;
           return;
         }
       }
     }
-    // Component not found in any folder — stay at folders level
+    // Not found — stay at folders level
     s.findComponentKey = null;
+    s.findComponentId = null;
   }
 
   function applySwapFromPicker(componentIdOrKey) {
@@ -2221,6 +2228,7 @@
 
         s.currentValue = nav.componentKey;
         s.findComponentKey = nav.componentKey;
+        s.findComponentId = nav.componentId || null;
         s.selectedSource = sourceKey;
         s.level = 'folders';
 
