@@ -956,6 +956,35 @@ pixso.ui.on("message", (msg: any) => {
 
   if (msg.type === "get-library-contents") {
     const { libraryKey } = msg;
+    if (libraryKey === pixso.fileKey) {
+      // getLibraryByKeyAsync rejects the current file key — walk local components instead
+      // and return as library-contents so UI caches under the correct key
+      const folderMap: { [name: string]: any[] } = {};
+      function walkLocal(node: BaseNode, folderName: string) {
+        if (!("type" in node)) return;
+        if (node.type === "COMPONENT_SET") {
+          const variants = "children" in node
+            ? (node as any).children.filter((c: any) => c.type === "COMPONENT").map((c: any) => ({ id: c.id, name: c.name }))
+            : [];
+          if (!folderMap[folderName]) folderMap[folderName] = [];
+          folderMap[folderName].push({ id: node.id, name: (node as any).name, type: "COMPONENT_SET", variants });
+        } else if (node.type === "COMPONENT") {
+          const parent = (node as any).parent;
+          if (!parent || parent.type !== "COMPONENT_SET") {
+            if (!folderMap[folderName]) folderMap[folderName] = [];
+            folderMap[folderName].push({ id: node.id, name: (node as any).name, type: "COMPONENT" });
+          }
+        } else if ("children" in node && node.type !== "INSTANCE") {
+          const next = (node.type === "FRAME" || node.type === "SECTION") && (node as any).parent?.type === "PAGE"
+            ? (node as any).name : folderName;
+          for (const child of (node as any).children) walkLocal(child, next);
+        }
+      }
+      for (const page of pixso.root.children) walkLocal(page, (page as any).name);
+      const folders = Object.entries(folderMap).map(([name, components]) => ({ name, components }));
+      pixso.ui.postMessage({ type: "library-contents", libraryKey, folders });
+      return;
+    }
     pixso.getLibraryByKeyAsync(libraryKey).then((assets) => {
       const folderMap: { [name: string]: any[] } = {};
 
@@ -1461,8 +1490,11 @@ pixso.ui.on("message", (msg: any) => {
       // libraryKey is async — add 5s timeout so it never hangs
       const libInfoPromise = withTimeout(currentComp.getLibraryInfoAsync(), 5000, null)
         .then((libInfo) => {
-          if (libInfo && libInfo.key) nav.libraryKey = libInfo.key;
-          if (libInfo && libInfo.name) nav.libraryName = libInfo.name;
+          // Never use the current file's own key — getLibraryByKeyAsync rejects it
+          if (libInfo && libInfo.key && libInfo.key !== pixso.fileKey) {
+            nav.libraryKey = libInfo.key;
+            nav.libraryName = libInfo.name;
+          }
         })
         .catch(() => {});
 
