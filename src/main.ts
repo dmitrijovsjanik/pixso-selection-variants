@@ -1377,6 +1377,14 @@ pixso.ui.on("message", (msg: any) => {
     const { propertyName } = msg;
     const sel = pixso.currentPage.selection;
 
+    // Helper: wrap a promise with a timeout that resolves to fallback instead of hanging
+    function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+      return Promise.race([
+        promise,
+        new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+      ]);
+    }
+
     // ── 1. Collect preferred value keys ──
     let prefKeys: string[] = [];
     if (sel && sel.length > 0) {
@@ -1480,14 +1488,14 @@ pixso.ui.on("message", (msg: any) => {
       const values: { id: string; name: string; thumbnailDataUrl: string }[] = [];
       const fileKey = pixso.fileKey;
 
-      const prefValuesPromise = currentComp!.getLibraryInfoAsync().then(async (libInfo) => {
+      const prefValuesPromise = withTimeout(currentComp!.getLibraryInfoAsync(), 5000, null).then(async (libInfo) => {
         const isCurrentFile = libInfo && fileKey && libInfo.key === fileKey;
 
         // Search the component's own library first (unless it's the current file)
         if (libInfo && libInfo.key && !isCurrentFile) {
           try {
-            const assets = await pixso.getLibraryByKeyAsync(libInfo.key);
-            for (const comp of assets.componentList) {
+            const assets = await withTimeout(pixso.getLibraryByKeyAsync(libInfo.key), 8000, null);
+            for (const comp of (assets?.componentList ?? [])) {
               if (comp.type === "COMPONENT_SET") {
                 if (keySet.has(comp.key)) {
                   const first = comp.variants[0];
@@ -1511,14 +1519,14 @@ pixso.ui.on("message", (msg: any) => {
         // Search remaining keys in other subscribed libraries
         if (keySet.size > 0) {
           try {
-            const libraries = await pixso.getLibraryListAsync();
+            const libraries = await withTimeout(pixso.getLibraryListAsync(), 5000, []);
             for (const lib of libraries) {
               if (!lib.subscribed || keySet.size === 0) continue;
               if (fileKey && lib.key === fileKey) continue;
               if (libInfo && lib.key === libInfo.key) continue;
               try {
-                const assets = await pixso.getLibraryByKeyAsync(lib.key);
-                for (const comp of assets.componentList) {
+                const assets = await withTimeout(pixso.getLibraryByKeyAsync(lib.key), 8000, null);
+                for (const comp of (assets?.componentList ?? [])) {
                   if (comp.type === "COMPONENT_SET") {
                     for (const v of comp.variants) {
                       if (keySet.has(v.key)) {
@@ -1564,7 +1572,27 @@ pixso.ui.on("message", (msg: any) => {
       }).catch(() => [] as { id: string; name: string; thumbnailDataUrl: string }[]);
 
       Promise.all([sourcesPromise, prefValuesPromise]).then(([sources, preferredValues]) => {
-        pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, preferredValues, navigateTo: null });
+        // If quick swap resolved to nothing useful (empty, or only the current component),
+        // fall back to navigateTo so the user sees the full library browser.
+        const currentKey = currentComp!.key;
+        const usefulValues = preferredValues.filter(v => v.id !== currentKey);
+        const isTrivial = preferredValues.length === 0 || (preferredValues.length === 1 && preferredValues[0].id === currentKey);
+
+        if (isTrivial) {
+          // Build navigateTo from currentComp directly (no extra async needed)
+          const mcP = currentComp!.parent;
+          const compName = (mcP && mcP.type === "COMPONENT_SET") ? mcP.name : currentComp!.name;
+          const nav: any = {
+            componentKey: currentKey,
+            componentName: compName,
+            containerName: (currentComp as any).containerName || "",
+            pageName: (currentComp as any).pageName || "",
+            remote: currentComp!.remote,
+          };
+          pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, preferredValues: [], navigateTo: nav });
+        } else {
+          pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, preferredValues: usefulValues, navigateTo: null });
+        }
       });
 
     } else if (currentComp) {
@@ -1579,7 +1607,7 @@ pixso.ui.on("message", (msg: any) => {
         remote: currentComp.remote,
       };
 
-      const libInfoPromise = currentComp.getLibraryInfoAsync()
+      const libInfoPromise = withTimeout(currentComp.getLibraryInfoAsync(), 5000, null)
         .then((libInfo) => {
           if (libInfo && libInfo.key) nav.libraryKey = libInfo.key;
           if (libInfo && libInfo.name) nav.libraryName = libInfo.name;
