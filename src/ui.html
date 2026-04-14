@@ -1978,13 +1978,13 @@
     const subPath = s.currentSubPath || '';
 
     // Group components: those with deeper "/" paths become sub-folders
+    const normSub = subPath ? normSlashes(subPath) : '';
     const subFolders = {};
     const directComponents = [];
 
     for (const comp of folder.components) {
       // Normalize slash spacing: "Item /└" and "Item / └" → "Item / └"
       const normName = normSlashes(comp.name);
-      const normSub = subPath ? normSlashes(subPath) : '';
 
       let relativeName;
       if (!normSub) {
