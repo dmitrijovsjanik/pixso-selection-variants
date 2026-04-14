@@ -1767,12 +1767,19 @@
           s.level = 'components';
           s.currentFolder = folder.name;
 
-          // Extract sub-path from normalized component name
+          // Extract sub-path and push a history entry for each intermediate level
+          // "A / B / C / Icon" → subPath "A / B / C", history: [null, "A", "A / B"]
           const normComp = normSlashes(comp.name || '');
           const lastSlash = normComp.lastIndexOf(' / ');
           if (lastSlash > 0) {
             const subPath = normComp.substring(0, lastSlash);
+            const parts = subPath.split(' / ');
+            // Push root (no subPath)
             s.history.push({ level: 'components', currentFolder: folder.name, currentSubPath: null, currentSet: null });
+            // Push each intermediate level
+            for (let i = 0; i < parts.length - 1; i++) {
+              s.history.push({ level: 'components', currentFolder: folder.name, currentSubPath: parts.slice(0, i + 1).join(' / '), currentSet: null });
+            }
             s.currentSubPath = subPath;
           }
 
