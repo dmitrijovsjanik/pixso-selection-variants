@@ -2052,14 +2052,7 @@
         <div class="swap-comp-info"><div class="swap-comp-name">${escHtml(item.name)}</div></div>
       </div>`;
     }
-    // Unresolved items — show shimmer placeholders (will resolve when cache loads)
-    for (const key of unresolved) {
-      html += `<div class="swap-component-item" data-picker-apply="${escAttr(key)}">
-        <div class="swap-thumb-loading"></div>
-        <div class="swap-comp-info"><div class="swap-comp-name" style="color:var(--neutral-9)">Loading...</div></div>
-      </div>`;
-    }
-    return html;
+    return html || `<div class="swap-picker-loading"><div class="spinner"></div>Loading components...</div>`;
   }
 
   function renderSwapPickerBodyContent() {
