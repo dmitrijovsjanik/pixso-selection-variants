@@ -1070,6 +1070,9 @@
   let swapOptionsMap = {}; // propName -> [{id, name}]
   let thumbnailCache = {}; // nodeId -> dataUrl
 
+  // Normalize inconsistent slash separators: "Item /└" and "Item / └" both become "Item / └"
+  function normSlashes(s) { return s.replace(/\s*\/\s*/g, ' / '); }
+
   // ─── Swap Picker State ───
   let swapPickerState = null;
   // When active: { propertyName, instanceId, componentName, level, history[], sources, libraryCache, preferredValues, searchResults }
@@ -1764,11 +1767,11 @@
           s.level = 'components';
           s.currentFolder = folder.name;
 
-          // Extract sub-path from component name: "Icons / Filled / Arrow" → subPath = "Icons / Filled"
-          const compName = comp.name || '';
-          const lastSlash = compName.lastIndexOf(' / ');
+          // Extract sub-path from normalized component name
+          const normComp = normSlashes(comp.name || '');
+          const lastSlash = normComp.lastIndexOf(' / ');
           if (lastSlash > 0) {
-            const subPath = compName.substring(0, lastSlash);
+            const subPath = normComp.substring(0, lastSlash);
             s.history.push({ level: 'components', currentFolder: folder.name, currentSubPath: null, currentSet: null });
             s.currentSubPath = subPath;
           }
@@ -1972,17 +1975,17 @@
     const directComponents = [];
 
     for (const comp of folder.components) {
-      const name = comp.name;
-      // Strip the subPath prefix if we're inside a sub-folder
-      // Also include components whose name exactly equals subPath (sibling ComponentSets)
+      // Normalize slash spacing: "Item /└" and "Item / └" → "Item / └"
+      const normName = normSlashes(comp.name);
+      const normSub = subPath ? normSlashes(subPath) : '';
+
       let relativeName;
-      if (!subPath) {
-        relativeName = name;
-      } else if (name.startsWith(subPath + ' / ')) {
-        relativeName = name.slice(subPath.length + 3);
-      } else if (name === subPath) {
-        // Exact match — show at this level with last segment as display name
-        relativeName = name.split(' / ').pop();
+      if (!normSub) {
+        relativeName = normName;
+      } else if (normName.startsWith(normSub + ' / ')) {
+        relativeName = normName.slice(normSub.length + 3);
+      } else if (normName === normSub) {
+        relativeName = normName.split(' / ').pop();
       } else {
         relativeName = null;
       }
@@ -2005,7 +2008,7 @@
     // Render sub-folders first
     const subFolderNames = Object.keys(subFolders).sort();
     for (const sfName of subFolderNames) {
-      html += `<div class="swap-folder-item" data-picker-subfolder="${escAttr(subPath ? subPath + ' / ' + sfName : sfName)}">
+      html += `<div class="swap-folder-item" data-picker-subfolder="${escAttr(normSub ? normSub + ' / ' + sfName : sfName)}">
         <span class="swap-folder-icon">${folderSvg}</span>
         <span class="swap-item-name">${escHtml(sfName)}</span>
         <span class="swap-item-count">${subFolders[sfName]}</span>
