@@ -845,46 +845,25 @@ pixso.ui.on("message", (msg: any) => {
   }
 
   if (msg.type === "apply-swap-from-search") {
-    // Apply a swap from search results — may need import if it's a library key
+    // Apply a swap — setProperties accepts both node IDs and component keys directly
     const { instanceId, propertyName, componentIdOrKey, bulkComponentName } = msg;
 
-    const applySwap = (compId: string) => {
-      if (bulkComponentName) {
-        // Bulk
-        const data = analyzeSelectionSync();
-        const targets = data.groupedByComponent[bulkComponentName] ?? [];
-        for (const inst of targets) {
-          const node = pixso.getNodeById(inst.id) as InstanceNode | null;
-          if (node && node.type === "INSTANCE") {
-            node.setProperties({ [propertyName]: compId });
-          }
-        }
-      } else if (instanceId) {
-        const node = pixso.getNodeById(instanceId) as InstanceNode | null;
+    if (bulkComponentName) {
+      const data = analyzeSelectionSync();
+      const targets = data.groupedByComponent[bulkComponentName] ?? [];
+      for (const inst of targets) {
+        const node = pixso.getNodeById(inst.id) as InstanceNode | null;
         if (node && node.type === "INSTANCE") {
-          node.setProperties({ [propertyName]: compId });
+          try { node.setProperties({ [propertyName]: componentIdOrKey }); } catch {}
         }
       }
-      sendSelectionData();
-    };
-
-    // Try as local node ID first
-    const localNode = pixso.getNodeById(componentIdOrKey);
-    if (localNode) {
-      applySwap(localNode.id);
-    } else {
-      // It's a library key — try import (may fail for some libraries)
-      try {
-        pixso.importComponentByKeyAsync(componentIdOrKey).then((comp) => {
-          applySwap(comp.id);
-        }).catch(() => {
-          console.warn("[Swap] Failed to import component:", componentIdOrKey);
-          pixso.notify("Could not import component from library", { error: true });
-        });
-      } catch {
-        console.warn("[Swap] importComponentByKeyAsync threw:", componentIdOrKey);
+    } else if (instanceId) {
+      const node = pixso.getNodeById(instanceId) as InstanceNode | null;
+      if (node && node.type === "INSTANCE") {
+        try { node.setProperties({ [propertyName]: componentIdOrKey }); } catch {}
       }
     }
+    sendSelectionData();
   }
 
   if (msg.type === "get-thumbnails") {
