@@ -712,6 +712,15 @@ pixso.ui.on("message", (msg: any) => {
     }
   }
 
+  if (msg.type === "toggle-visibility") {
+    const { instanceId } = msg;
+    const node = pixso.getNodeById(instanceId) as SceneNode | null;
+    if (node) {
+      node.visible = !node.visible;
+      sendSelectionData();
+    }
+  }
+
   if (msg.type === "go-up") {
     // Select the parent of the current selection (like Shift+Enter)
     const sel = pixso.currentPage.selection;

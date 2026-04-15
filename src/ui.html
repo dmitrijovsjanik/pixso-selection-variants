@@ -146,6 +146,21 @@
     background: var(--neutral-2);
   }
 
+  .all-hidden-group .component-name {
+    color: var(--neutral-9);
+  }
+
+  .instance-thumb-hidden {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    background: var(--neutral-a-2);
+    flex-shrink: 0;
+  }
+
   .component-name {
     font-weight: 600;
     font-size: 13px;
@@ -816,7 +831,7 @@
     background: var(--neutral-0);
     border-bottom: 1px solid var(--neutral-3);
     position: sticky;
-    top: 69px;
+    top: 0;
     z-index: 5;
     cursor: pointer;
     transition: background var(--transition-fast);
@@ -871,20 +886,28 @@
   .detail-instance-header {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 8px;
     padding: 8px 12px;
     cursor: pointer;
     position: sticky;
-    top: 105px;
+    top: 45px;
     z-index: 3;
-    background: var(--neutral-0);
-    border-bottom: 1px solid var(--neutral-a-2);
+    background: var(--neutral-1);
+    border-bottom: 1px solid var(--neutral-3);
   }
 
   .detail-instance-header .collapse-arrow {
+    /* Override global .collapse-arrow CSS triangle */
+    display: inline-flex;
+    width: auto;
+    height: auto;
+    border: none;
+    margin: 0;
     cursor: pointer;
-    padding: 4px;
-    margin: -4px 0;
+    flex-shrink: 0;
+    font-size: 12px;
+    color: var(--neutral-9);
+    transition: transform var(--transition-fast);
   }
 
   .detail-instance .properties {
@@ -903,15 +926,15 @@
     transform: rotate(-90deg);
   }
 
-  .detail-instance-header:hover .detail-instance-name {
-    color: var(--brand-9);
+  .detail-instance-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--neutral-12);
+    transition: color 300ms ease;
   }
 
-  .detail-instance-name {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--neutral-11);
-    transition: color var(--transition-fast);
+  .hidden-instance .detail-instance-name {
+    color: var(--neutral-9);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -922,6 +945,45 @@
     height: 14px;
     color: var(--brand-9);
     flex-shrink: 0;
+  }
+
+  .detail-instance-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .btn-visibility {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
+    color: var(--neutral-9);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-family: inherit;
+    line-height: 1;
+  }
+
+  .btn-visibility:hover {
+    background: var(--neutral-a-4);
+    color: var(--neutral-11);
+  }
+
+  /* Secondary style when layer is hidden */
+  .btn-visibility-off {
+    background: var(--neutral-a-3);
+    color: var(--neutral-11);
+  }
+
+  .btn-visibility-off:hover {
+    background: var(--neutral-a-4);
   }
 
   .instance-thumb-shimmer {
@@ -1347,8 +1409,15 @@
 
     // ─── Detail view: individual instances of one component ───
     if (detailViewComponent) {
+      // Hide go-up bar and tabs in detail view
+      document.getElementById('go-up-bar').style.display = 'none';
+      document.querySelector('.tabs').style.display = 'none';
       renderDetailView(container, data, detailViewComponent);
       return;
+    } else {
+      // Restore go-up bar and tabs
+      document.getElementById('go-up-bar').style.display = '';
+      document.querySelector('.tabs').style.display = '';
     }
 
     // ─── Bulk list view (main) ───
@@ -1363,17 +1432,20 @@
       if (!hasVariants && !hasCompProps) continue;
 
       const merged = getMergedProperties(instances);
-      const firstThumb = thumbnailCache[instances[0]?.id] || '';
-      const allHidden = instances.every(i => !i.visible);
-      const hiddenIcon = `<span class="hidden-icon" title="All instances hidden"><i class="hgi-stroke hgi-eye-off" style="font-size:14px"></i></span>`;
+      const visibleFirst = instances.find(i => i.visible);
+      const allHidden = !visibleFirst;
+      const firstThumbId = visibleFirst?.id || '';
+      const firstThumb = thumbnailCache[firstThumbId] || '';
 
-      html += `<div class="component-group">`;
+      html += `<div class="component-group ${allHidden ? 'all-hidden-group' : ''}">`;
       html += `<div class="component-header">
         <span class="component-name">
-          <img class="instance-thumb" data-thumb-id="${escAttr(instances[0]?.id || '')}" src="${firstThumb}" style="${firstThumb ? '' : 'display:none'}" />
-          ${!firstThumb ? `<div class="instance-thumb-shimmer" data-thumb-placeholder="${escAttr(instances[0]?.id || '')}"></div>` : ''}
+          ${allHidden
+            ? `<span class="instance-thumb-hidden"><i class="hgi-stroke hgi-view-off" style="font-size:18px;color:var(--neutral-9)"></i></span>`
+            : `<img class="instance-thumb" data-thumb-id="${escAttr(firstThumbId)}" src="${firstThumb}" style="${firstThumb ? '' : 'display:none'}" />
+               ${!firstThumb ? `<div class="instance-thumb-shimmer" data-thumb-placeholder="${escAttr(firstThumbId)}"></div>` : ''}`
+          }
           ${escHtml(compName)}
-          ${allHidden ? hiddenIcon : ''}
         </span>
         <div class="component-actions">
           ${instances.length > 1 ? `<button class="btn-instances" data-open-detail="${escAttr(compName)}">
@@ -1417,29 +1489,47 @@
   function renderDetailView(container, data, compName) {
     const instances = data.groupedByComponent[compName] || [];
 
+    // Preserve state across re-renders
+    const scrollTop = container.scrollTop || document.documentElement.scrollTop || 0;
+    const collapsedIds = new Set();
+    container.querySelectorAll('.detail-instance.collapsed').forEach(el => {
+      const btn = el.querySelector('[data-toggle-visibility]');
+      if (btn) collapsedIds.add(btn.dataset.toggleVisibility);
+    });
+
     let html = `<div class="detail-view">`;
 
-    // Header with back button
+    // Header with back button and component preview (use first visible instance)
+    const visibleInst = instances.find(i => i.visible) || instances[0];
+    const headerThumbId = visibleInst?.id || '';
+    const headerThumb = thumbnailCache[headerThumbId] || '';
     html += `<div class="detail-header" data-back-to-bulk>
       <span class="go-up-icon">
         <i class="hgi-stroke hgi-arrow-left-01" style="font-size:12px"></i>
       </span>
+      <img class="instance-thumb" data-thumb-id="${escAttr(headerThumbId)}" src="${headerThumb}" style="${headerThumb ? '' : 'display:none'}" />
+      ${!headerThumb ? `<div class="instance-thumb-shimmer" data-thumb-placeholder="${escAttr(headerThumbId)}"></div>` : ''}
       <span class="detail-title">${escHtml(compName)}</span>
       <span class="detail-count">${instances.length} instances</span>
     </div>`;
 
     // Individual instances with their controls
+    let instIndex = 0;
     for (const inst of instances) {
       if (inst.variantProperties.length === 0 && inst.componentProperties.length === 0) continue;
+      instIndex++;
 
-      const thumbSrc = thumbnailCache[inst.id] || '';
-      html += `<div class="detail-instance">`;
-      html += `<div class="detail-instance-header" data-instance-toggle data-click-instance="${escAttr(inst.id)}">
-        <span class="collapse-arrow"></span>
-        <img class="instance-thumb" data-thumb-id="${escAttr(inst.id)}" src="${thumbSrc}" style="${thumbSrc ? '' : 'display:none'}" />
-        <i class="hgi-stroke hgi-diamond detail-instance-icon" style="font-size:14px;color:var(--brand-9);${thumbSrc ? 'display:none' : ''}"></i>
-        <span class="detail-instance-name">${escHtml(inst.name)}</span>
-        ${!inst.visible ? `<span class="hidden-icon" title="Hidden layer"><i class="hgi-stroke hgi-eye-off" style="font-size:14px"></i></span>` : ''}
+      const shortName = (inst.name.includes('/') ? inst.name.split('/').pop().trim() : inst.name);
+      const displayName = shortName + ' ' + instIndex;
+      const isHidden = !inst.visible;
+      const wasCollapsed = collapsedIds.has(inst.id);
+      const shouldCollapse = isHidden || wasCollapsed;
+      html += `<div class="detail-instance ${shouldCollapse ? 'collapsed' : ''} ${isHidden ? 'hidden-instance' : ''}">`;
+      html += `<div class="detail-instance-header" data-instance-toggle>
+        <button class="btn-visibility ${isHidden ? 'btn-visibility-off' : ''}" data-toggle-visibility="${escAttr(inst.id)}" title="${isHidden ? 'Show layer' : 'Hide layer'}">
+          <i class="hgi-stroke ${isHidden ? 'hgi-view-off' : 'hgi-view'}" style="font-size:14px"></i>
+        </button>
+        <span class="detail-instance-name">${escHtml(displayName)}</span>
       </div>`;
 
       html += `<div class="detail-instance-body"><div class="properties">`;
@@ -1463,6 +1553,47 @@
 
     container.innerHTML = html;
     attachEventListeners();
+
+    // Visibility toggle — scoped to this container only
+    container.querySelectorAll('[data-toggle-visibility]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const instId = el.dataset.toggleVisibility;
+        postMsg({ type: 'toggle-visibility', instanceId: instId });
+
+        // Update UI locally — no re-render needed
+        const instance = el.closest('.detail-instance');
+        const icon = el.querySelector('.hgi-stroke');
+        const isNowHidden = !instance.classList.contains('hidden-instance');
+        instance.classList.toggle('hidden-instance');
+        el.classList.toggle('btn-visibility-off');
+        if (icon) {
+          icon.className = `hgi-stroke ${isNowHidden ? 'hgi-view-off' : 'hgi-view'}`;
+        }
+        el.title = isNowHidden ? 'Show layer' : 'Hide layer';
+        // Collapse when hiding, expand when showing
+        if (isNowHidden) {
+          collapseInstance(instance);
+        } else {
+          expandInstance(instance);
+          // Request thumbnail now that it's visible
+          if (!thumbnailCache[instId]) {
+            postMsg({ type: 'get-thumbnails', nodeIds: [instId] });
+          }
+        }
+      });
+    });
+
+    // Request thumbnail for header if not cached
+    if (headerThumbId && !thumbnailCache[headerThumbId]) {
+      postMsg({ type: 'get-thumbnails', nodeIds: [headerThumbId] });
+    }
+
+    // Restore scroll position
+    requestAnimationFrame(() => {
+      container.scrollTop = scrollTop;
+      document.documentElement.scrollTop = scrollTop;
+    });
   }
 
   // ─── Render Instances tab ───
@@ -1486,13 +1617,19 @@
 
     for (const compName of names) {
       const instances = groups[compName];
-      const instThumb = thumbnailCache[instances[0]?.id] || '';
+      const visFirst = instances.find(i => i.visible);
+      const instAllHidden = !visFirst;
+      const instThumbId = visFirst?.id || '';
+      const instThumb = thumbnailCache[instThumbId] || '';
 
-      html += `<div class="component-group">`;
+      html += `<div class="component-group ${instAllHidden ? 'all-hidden-group' : ''}">`;
       html += `<div class="component-header">
         <span class="component-name">
-          <img class="instance-thumb" data-thumb-id="${escAttr(instances[0]?.id || '')}" src="${instThumb}" style="${instThumb ? '' : 'display:none'}" />
-          ${!instThumb ? `<div class="instance-thumb-shimmer" data-thumb-placeholder="${escAttr(instances[0]?.id || '')}"></div>` : ''}
+          ${instAllHidden
+            ? `<span class="instance-thumb-hidden"><i class="hgi-stroke hgi-view-off" style="font-size:18px;color:var(--neutral-9)"></i></span>`
+            : `<img class="instance-thumb" data-thumb-id="${escAttr(instThumbId)}" src="${instThumb}" style="${instThumb ? '' : 'display:none'}" />
+               ${!instThumb ? `<div class="instance-thumb-shimmer" data-thumb-placeholder="${escAttr(instThumbId)}"></div>` : ''}`
+          }
           ${escHtml(compName)}
         </span>
         <div class="component-actions">
@@ -1509,7 +1646,7 @@
         html += `<div class="instance-name">
           <i class="hgi-stroke hgi-diamond icon" style="font-size:14px"></i>
           ${escHtml(inst.name)}
-          ${!inst.visible ? `<span class="hidden-icon" title="Hidden"><i class="hgi-stroke hgi-eye-off" style="font-size:12px"></i></span>` : ''}
+          ${!inst.visible ? `<span class="hidden-icon" title="Hidden"><i class="hgi-stroke hgi-view-off" style="font-size:12px"></i></span>` : ''}
           ${inst.depth > 0 ? `<span style="color:#bbb;font-size:10px">depth ${inst.depth}</span>` : ''}
         </div>`;
         if (inst.path) {
@@ -1522,6 +1659,47 @@
 
     container.innerHTML = html;
     attachEventListeners();
+  }
+
+  // ─── Accordion animation helpers ───
+  function collapseInstance(el) {
+    const body = el.querySelector('.detail-instance-body');
+    if (!body || el.classList.contains('collapsed')) return;
+    const header = el.querySelector('.detail-instance-header');
+    body.style.height = body.scrollHeight + 'px';
+    body.style.overflow = 'hidden';
+    body.style.transition = 'height 300ms ease';
+    requestAnimationFrame(() => {
+      body.style.height = '0px';
+      body.addEventListener('transitionend', function handler() {
+        body.removeEventListener('transitionend', handler);
+        el.classList.add('collapsed');
+        body.style.height = '';
+        body.style.overflow = '';
+        body.style.transition = '';
+        // Keep header in view after collapse
+        if (header) header.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }, { once: true });
+    });
+  }
+
+  function expandInstance(el) {
+    const body = el.querySelector('.detail-instance-body');
+    if (!body || !el.classList.contains('collapsed')) return;
+    el.classList.remove('collapsed');
+    const targetHeight = body.scrollHeight;
+    body.style.height = '0px';
+    body.style.overflow = 'hidden';
+    body.style.transition = 'height 300ms ease';
+    requestAnimationFrame(() => {
+      body.style.height = targetHeight + 'px';
+      body.addEventListener('transitionend', function handler() {
+        body.removeEventListener('transitionend', handler);
+        body.style.height = '';
+        body.style.overflow = '';
+        body.style.transition = '';
+      }, { once: true });
+    });
   }
 
   // ─── Attach event listeners ───
@@ -1547,11 +1725,16 @@
       });
     });
 
-    // Collapse/expand detail instances (click on arrow)
-    document.querySelectorAll('[data-instance-toggle] .collapse-arrow').forEach(el => {
+    // Collapse/expand detail instances (click on header, animated)
+    document.querySelectorAll('[data-instance-toggle]').forEach(el => {
       el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        el.closest('.detail-instance').classList.toggle('collapsed');
+        if (e.target.closest('.btn-visibility')) return;
+        const inst = el.closest('.detail-instance');
+        if (inst.classList.contains('collapsed')) {
+          expandInstance(inst);
+        } else {
+          collapseInstance(inst);
+        }
       });
     });
 
@@ -1573,12 +1756,7 @@
       });
     });
 
-    // Click instance name in detail view to select
-    document.querySelectorAll('.detail-instance-header[data-click-instance]').forEach(el => {
-      el.addEventListener('click', () => {
-        postMsg({ type: 'select-instance', instanceId: el.dataset.clickInstance });
-      });
-    });
+    // Note: visibility toggle listeners are attached in renderDetailView, not here
 
     // Select component instances
     document.querySelectorAll('[data-select-component]').forEach(el => {
@@ -2332,17 +2510,24 @@
       currentData = msg.data;
       parentInfo = msg.parentInfo || null;
       swapOptionsMap = {};
+
+      // If in detail view, skip full re-render — data is updated, DOM is already correct
+      if (detailViewComponent) {
+        return;
+      }
+
       updateGoUpBar();
       renderVariantsTab(currentData);
       renderInstancesTab(currentData);
 
-      // Request thumbnails for component group headers (one per group — what's actually visible)
+      // Request thumbnails for component group headers (first visible instance per group)
       if (currentData.groupedByComponent) {
         const ids = [];
         for (const compName of Object.keys(currentData.groupedByComponent)) {
-          const first = currentData.groupedByComponent[compName][0];
-          if (first && !thumbnailCache[first.id]) {
-            ids.push(first.id);
+          const insts = currentData.groupedByComponent[compName];
+          const vis = insts.find(i => i.visible) || insts[0];
+          if (vis && !thumbnailCache[vis.id]) {
+            ids.push(vis.id);
           }
         }
         if (ids.length > 0) {
