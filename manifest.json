@@ -1,5 +1,5 @@
 {
-  "name": "Selection Variants & Instances",
+  "name": "Selection Variants",
   "id": "selection-variants-dev",
   "main": "./dist/main.js",
   "ui": "./src/ui.html",
