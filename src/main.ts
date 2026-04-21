@@ -34,7 +34,8 @@ interface InstanceInfo {
   componentName: string;
   componentId: string | null;
   depth: number; // nesting level
-  visible: boolean;
+  visible: boolean; // isEffectivelyVisible (includes parent chain)
+  directlyVisible: boolean; // node.visible (only this node)
   variantProperties: VariantProperty[];
   componentProperties: ComponentPropertyInfo[];
   path: string; // parent chain for display
@@ -318,6 +319,7 @@ function analyzeSelectionSync(): SelectionData {
         componentId: mainComponent?.id ?? null,
         depth,
         visible: isEffectivelyVisible(node),
+        directlyVisible: node.visible,
         variantProperties: getVariantProperties(node),
         componentProperties: getComponentProperties(node),
         path: getNodePath(node),
@@ -381,6 +383,7 @@ function analyzeSelectionAsync(onDone: (data: SelectionData) => void) {
           componentId: mainComponent?.id ?? null,
           depth,
           visible: isEffectivelyVisible(node),
+          directlyVisible: node.visible,
           variantProperties: getVariantProperties(node),
           componentProperties: getComponentProperties(node),
           path: getNodePath(node),

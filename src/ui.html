@@ -122,6 +122,22 @@
     line-height: 1.5;
   }
 
+  .empty-state .copyright {
+    margin-top: 32px;
+    font-size: 11px;
+    color: var(--neutral-5);
+  }
+
+  .empty-state .copyright a {
+    color: var(--neutral-5);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+  }
+
+  .empty-state .copyright a:hover {
+    color: var(--neutral-9);
+  }
+
   /* ─── Component Group ─── */
   .component-group {
     border-bottom: 1px solid var(--neutral-3);
@@ -146,8 +162,36 @@
     background: var(--neutral-2);
   }
 
+  .all-hidden-group .component-header {
+    background:
+      repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 6px,
+        var(--neutral-a-2) 6px,
+        var(--neutral-a-2) 9px
+      ),
+      var(--neutral-1);
+  }
+
   .all-hidden-group .component-name {
     color: var(--neutral-9);
+  }
+
+  .all-hidden-group .component-body {
+    display: none;
+  }
+
+  .hidden-nested-badge {
+    display: inline-flex;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--neutral-9);
+    background: var(--neutral-a-3);
+    border-radius: var(--radius-full);
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .instance-thumb-hidden {
@@ -765,6 +809,26 @@
     background: var(--brand-10);
   }
 
+  /* Mixed state: centered position, minus icon instead of circle */
+  .toggle-mixed .toggle-slider {
+    background: var(--brand-9);
+  }
+
+  .toggle-mixed:hover .toggle-slider {
+    background: var(--brand-10);
+  }
+
+  .toggle-mixed .toggle-slider::before {
+    transform: none;
+    border-radius: 1px;
+    width: 8px;
+    height: 2px;
+    top: 6px;
+    left: 8px;
+    background: var(--neutral-0);
+    box-shadow: none;
+  }
+
   .toggle input:checked + .toggle-slider::before {
     transform: translateX(10px);
   }
@@ -1191,6 +1255,7 @@
       <div class="empty-state">
         <i class="hgi-stroke hgi-cursor-01" style="font-size:40px"></i>
         <p>${message}</p>
+        <div class="copyright">by <a href="https://t.me/ovsjanik" target="_blank">Dmitrij Ovsjanik</a></div>
       </div>`;
   }
 
@@ -1240,7 +1305,8 @@
 
     // Boolean-like variants (true/false, yes/no) → render as toggle
     if (isBooleanLikeVariant(prop)) {
-      const checked = getBooleanLikeChecked(prop);
+      const varMixed = String(prop.currentValue) === '(mixed)';
+      const checked = !varMixed && getBooleanLikeChecked(prop);
       const vals = getBooleanLikeValues(prop);
       const evtType = isBulk ? 'bulk-set-variant' : 'set-variant';
       const dataAttr = isBulk
@@ -1251,7 +1317,7 @@
         <div class="property-row">
           <span class="property-label" title="${escAttr(prop.name)}">${escHtml(clean)}</span>
           <div class="property-control">
-            <label class="toggle">
+            <label class="toggle ${varMixed ? 'toggle-mixed' : ''}">
               <input type="checkbox" class="prop-variant-toggle" data-type="${evtType}" ${dataAttr}
                 data-on="${escAttr(vals.on)}" data-off="${escAttr(vals.off)}" ${checked ? 'checked' : ''} />
               <span class="toggle-slider"></span>
@@ -1282,7 +1348,8 @@
     }
 
     if (prop.type === 'BOOLEAN') {
-      const checked = prop.currentValue === true || prop.currentValue === 'true';
+      const isMixed = prop.currentValue === '(mixed)';
+      const checked = !isMixed && (prop.currentValue === true || prop.currentValue === 'true');
       const evtType = isBulk ? 'bulk-set-component-property' : 'set-component-property';
       const dataAttr = isBulk
         ? `data-component="${escAttr(componentName)}" data-prop="${escAttr(prop.name)}"`
@@ -1292,7 +1359,7 @@
         <div class="property-row">
           <span class="property-label" title="${escAttr(prop.name)}">${escHtml(clean)}</span>
           <div class="property-control">
-            <label class="toggle">
+            <label class="toggle ${isMixed ? 'toggle-mixed' : ''}">
               <input type="checkbox" class="prop-toggle" data-type="${evtType}" ${dataAttr} ${checked ? 'checked' : ''} />
               <span class="toggle-slider"></span>
             </label>
@@ -1431,20 +1498,49 @@
 
       if (!hasVariants && !hasCompProps) continue;
 
-      const merged = getMergedProperties(instances);
       const visibleFirst = instances.find(i => i.visible);
       const allHidden = !visibleFirst;
+
+      // If all effectively hidden: check if some are DIRECTLY hidden (node.visible=false)
+      // vs hidden only because a parent is hidden (node.visible=true but parent hidden)
+      // Directly hidden → show collapsed header; hidden by parent → skip entirely
+      if (allHidden) {
+        const someDirectlyHidden = instances.some(i => !i.directlyVisible);
+        if (!someDirectlyHidden) continue; // all hidden by parent, skip
+
+        // Count nested groups hidden because of this parent
+        let hiddenNestedCount = 0;
+        for (const otherName of names) {
+          if (otherName === compName) continue;
+          const otherInsts = groups[otherName];
+          const otherAllHidden = otherInsts.every(i => !i.visible);
+          const otherHiddenByParent = otherAllHidden && !otherInsts.some(i => !i.directlyVisible);
+          if (otherHiddenByParent) hiddenNestedCount++;
+        }
+        const nestedBadge = hiddenNestedCount > 0
+          ? `<span class="hidden-nested-badge">+${hiddenNestedCount} nested</span>` : '';
+
+        // Show collapsed header with eye-off icon
+        html += `<div class="component-group all-hidden-group">`;
+        html += `<div class="component-header">
+          <span class="component-name">
+            <span class="instance-thumb-hidden"><i class="hgi-stroke hgi-view-off" style="font-size:18px;color:var(--neutral-9)"></i></span>
+            ${escHtml(compName)}
+            ${nestedBadge}
+          </span>
+        </div></div>`;
+        continue;
+      }
+
+      const merged = getMergedProperties(instances);
       const firstThumbId = visibleFirst?.id || '';
       const firstThumb = thumbnailCache[firstThumbId] || '';
 
-      html += `<div class="component-group ${allHidden ? 'all-hidden-group' : ''}">`;
+      html += `<div class="component-group">`;
       html += `<div class="component-header">
         <span class="component-name">
-          ${allHidden
-            ? `<span class="instance-thumb-hidden"><i class="hgi-stroke hgi-view-off" style="font-size:18px;color:var(--neutral-9)"></i></span>`
-            : `<img class="instance-thumb" data-thumb-id="${escAttr(firstThumbId)}" src="${firstThumb}" style="${firstThumb ? '' : 'display:none'}" />
-               ${!firstThumb ? `<div class="instance-thumb-shimmer" data-thumb-placeholder="${escAttr(firstThumbId)}"></div>` : ''}`
-          }
+          <img class="instance-thumb" data-thumb-id="${escAttr(firstThumbId)}" src="${firstThumb}" style="${firstThumb ? '' : 'display:none'}" />
+          ${!firstThumb ? `<div class="instance-thumb-shimmer" data-thumb-placeholder="${escAttr(firstThumbId)}"></div>` : ''}
           ${escHtml(compName)}
         </span>
         <div class="component-actions">
@@ -1618,18 +1714,28 @@
     for (const compName of names) {
       const instances = groups[compName];
       const visFirst = instances.find(i => i.visible);
-      const instAllHidden = !visFirst;
-      const instThumbId = visFirst?.id || '';
+      if (!visFirst) {
+        // Directly hidden → collapsed header; hidden by parent → skip
+        if (!instances.some(i => !i.directlyVisible)) continue;
+        html += `<div class="component-group all-hidden-group">`;
+        html += `<div class="component-header">
+          <span class="component-name">
+            <span class="instance-thumb-hidden"><i class="hgi-stroke hgi-view-off" style="font-size:18px;color:var(--neutral-9)"></i></span>
+            ${escHtml(compName)}
+          </span>
+          <div class="component-actions"><span class="component-count">${instances.length}</span></div>
+        </div></div>`;
+        continue;
+      }
+
+      const instThumbId = visFirst.id;
       const instThumb = thumbnailCache[instThumbId] || '';
 
-      html += `<div class="component-group ${instAllHidden ? 'all-hidden-group' : ''}">`;
+      html += `<div class="component-group">`;
       html += `<div class="component-header">
         <span class="component-name">
-          ${instAllHidden
-            ? `<span class="instance-thumb-hidden"><i class="hgi-stroke hgi-view-off" style="font-size:18px;color:var(--neutral-9)"></i></span>`
-            : `<img class="instance-thumb" data-thumb-id="${escAttr(instThumbId)}" src="${instThumb}" style="${instThumb ? '' : 'display:none'}" />
-               ${!instThumb ? `<div class="instance-thumb-shimmer" data-thumb-placeholder="${escAttr(instThumbId)}"></div>` : ''}`
-          }
+          <img class="instance-thumb" data-thumb-id="${escAttr(instThumbId)}" src="${instThumb}" style="${instThumb ? '' : 'display:none'}" />
+          ${!instThumb ? `<div class="instance-thumb-shimmer" data-thumb-placeholder="${escAttr(instThumbId)}"></div>` : ''}
           ${escHtml(compName)}
         </span>
         <div class="component-actions">
@@ -1752,7 +1858,20 @@
     document.querySelectorAll('[data-back-to-bulk]').forEach(el => {
       el.addEventListener('click', () => {
         detailViewComponent = null;
-        if (currentData) renderVariantsTab(currentData);
+        if (currentData) {
+          renderVariantsTab(currentData);
+          renderInstancesTab(currentData);
+          // Request thumbnails for any new visible groups
+          if (currentData.groupedByComponent) {
+            const ids = [];
+            for (const compName of Object.keys(currentData.groupedByComponent)) {
+              const insts = currentData.groupedByComponent[compName];
+              const vis = insts.find(i => i.visible);
+              if (vis && !thumbnailCache[vis.id]) ids.push(vis.id);
+            }
+            if (ids.length > 0) postMsg({ type: 'get-thumbnails', nodeIds: ids });
+          }
+        }
       });
     });
 
@@ -2520,15 +2639,14 @@
       renderVariantsTab(currentData);
       renderInstancesTab(currentData);
 
-      // Request thumbnails for component group headers (first visible instance per group)
+      // Request thumbnails for visible group headers — always request, even if cached
+      // (visibility may have changed, making previously broken thumbnails stale)
       if (currentData.groupedByComponent) {
         const ids = [];
         for (const compName of Object.keys(currentData.groupedByComponent)) {
           const insts = currentData.groupedByComponent[compName];
-          const vis = insts.find(i => i.visible) || insts[0];
-          if (vis && !thumbnailCache[vis.id]) {
-            ids.push(vis.id);
-          }
+          const vis = insts.find(i => i.visible);
+          if (vis) ids.push(vis.id);
         }
         if (ids.length > 0) {
           postMsg({ type: 'get-thumbnails', nodeIds: ids });
