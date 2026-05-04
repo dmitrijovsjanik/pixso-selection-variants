@@ -724,6 +724,15 @@ pixso.ui.on("message", (msg: any) => {
     }
   }
 
+  if (msg.type === "set-visible-count") {
+    const { instanceIds, count } = msg as { instanceIds: string[]; count: number };
+    for (let i = 0; i < instanceIds.length; i++) {
+      const node = pixso.getNodeById(instanceIds[i]) as SceneNode | null;
+      if (node) node.visible = i < count;
+    }
+    sendSelectionData();
+  }
+
   if (msg.type === "go-up") {
     // Select the parent of the current selection (like Shift+Enter)
     const sel = pixso.currentPage.selection;

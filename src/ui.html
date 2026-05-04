@@ -225,6 +225,35 @@
     font-weight: 500;
   }
 
+  .visible-count-select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--neutral-11);
+    background-color: var(--neutral-a-3);
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23474747' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 6px center;
+    border: none;
+    border-radius: var(--radius-full);
+    padding: 3px 20px 3px 10px;
+    cursor: pointer;
+    font-family: inherit;
+    line-height: 1.4;
+    transition: background-color var(--transition-fast);
+  }
+
+  .visible-count-select:hover {
+    background-color: var(--neutral-a-4);
+  }
+
+  .visible-count-select:focus {
+    outline: none;
+    background-color: var(--neutral-a-4);
+  }
+
   .component-actions {
     display: flex;
     align-items: center;
@@ -1259,6 +1288,56 @@
       </div>`;
   }
 
+  // CSS.escape polyfill — older webviews may lack it
+  function cssEscape(s) {
+    if (window.CSS && CSS.escape) return CSS.escape(s);
+    return String(s).replace(/[^a-zA-Z0-9_-]/g, c => '\\' + c);
+  }
+
+  // Apply hidden/visible state to a .detail-instance element (collapse + icon swap)
+  function applyDetailInstanceVisibility(instance, visible) {
+    const btn = instance.querySelector('[data-toggle-visibility]');
+    if (!btn) return;
+    const icon = btn.querySelector('.hgi-stroke');
+    instance.classList.toggle('hidden-instance', !visible);
+    btn.classList.toggle('btn-visibility-off', !visible);
+    if (icon) icon.className = `hgi-stroke ${visible ? 'hgi-view' : 'hgi-view-off'}`;
+    btn.title = visible ? 'Hide layer' : 'Show layer';
+    if (visible) expandInstance(instance);
+    else collapseInstance(instance);
+  }
+
+  // Recompute dropdown selected value based on current DOM state of detail-instances.
+  // Counts visible items regardless of position — matches "how many are showing".
+  function syncVisibleCountSelect(container) {
+    container.querySelectorAll('[data-set-visible-count]').forEach(sel => {
+      let ids;
+      try { ids = JSON.parse(sel.dataset.setVisibleCount); } catch { return; }
+      let visibleCount = 0;
+      for (const id of ids) {
+        const btn = container.querySelector(`[data-toggle-visibility="${cssEscape(id)}"]`);
+        if (!btn) continue;
+        const inst = btn.closest('.detail-instance');
+        if (inst && !inst.classList.contains('hidden-instance')) visibleCount++;
+      }
+      sel.value = String(visibleCount);
+    });
+  }
+
+  // ─── Visible-count dropdown for a group of instances ───
+  // Sets node.visible = (index < selected count) for the given instance IDs.
+  function renderVisibleCountSelect(instances) {
+    if (!instances || instances.length < 2) return '';
+    const total = instances.length;
+    const visibleCount = instances.filter(i => i.directlyVisible).length;
+    const ids = instances.map(i => i.id);
+    let opts = '';
+    for (let i = 0; i <= total; i++) {
+      opts += `<option value="${i}" ${i === visibleCount ? 'selected' : ''}>${i}</option>`;
+    }
+    return `<select class="visible-count-select" data-set-visible-count='${escAttr(JSON.stringify(ids))}' title="Show first N, hide the rest">${opts}</select>`;
+  }
+
   // ─── Clean property name (remove unique suffix like #123:456) ───
   function cleanPropName(name) {
     return name.replace(/#\d+:\d+$/, '').trim();
@@ -1544,6 +1623,7 @@
           ${escHtml(compName)}
         </span>
         <div class="component-actions">
+          ${renderVisibleCountSelect(instances)}
           ${instances.length > 1 ? `<button class="btn-instances" data-open-detail="${escAttr(compName)}">
             ${instances.length} · Edit each
             <i class="hgi-stroke hgi-arrow-right-01" style="font-size:12px"></i>
@@ -1606,7 +1686,7 @@
       <img class="instance-thumb" data-thumb-id="${escAttr(headerThumbId)}" src="${headerThumb}" style="${headerThumb ? '' : 'display:none'}" />
       ${!headerThumb ? `<div class="instance-thumb-shimmer" data-thumb-placeholder="${escAttr(headerThumbId)}"></div>` : ''}
       <span class="detail-title">${escHtml(compName)}</span>
-      <span class="detail-count">${instances.length} instances</span>
+      ${renderVisibleCountSelect(instances) || `<span class="detail-count">${instances.length} instances</span>`}
     </div>`;
 
     // Individual instances with their controls
@@ -1657,24 +1737,33 @@
         const instId = el.dataset.toggleVisibility;
         postMsg({ type: 'toggle-visibility', instanceId: instId });
 
-        // Update UI locally — no re-render needed
         const instance = el.closest('.detail-instance');
-        const icon = el.querySelector('.hgi-stroke');
         const isNowHidden = !instance.classList.contains('hidden-instance');
-        instance.classList.toggle('hidden-instance');
-        el.classList.toggle('btn-visibility-off');
-        if (icon) {
-          icon.className = `hgi-stroke ${isNowHidden ? 'hgi-view-off' : 'hgi-view'}`;
+        applyDetailInstanceVisibility(instance, !isNowHidden);
+        if (!isNowHidden && !thumbnailCache[instId]) {
+          postMsg({ type: 'get-thumbnails', nodeIds: [instId] });
         }
-        el.title = isNowHidden ? 'Show layer' : 'Hide layer';
-        // Collapse when hiding, expand when showing
-        if (isNowHidden) {
-          collapseInstance(instance);
-        } else {
-          expandInstance(instance);
-          // Request thumbnail now that it's visible
-          if (!thumbnailCache[instId]) {
-            postMsg({ type: 'get-thumbnails', nodeIds: [instId] });
+        syncVisibleCountSelect(container);
+      });
+    });
+
+    // Dropdown change in detail view — apply visibility locally to each instance
+    container.querySelectorAll('[data-set-visible-count]').forEach(sel => {
+      sel.addEventListener('change', () => {
+        let ids;
+        try { ids = JSON.parse(sel.dataset.setVisibleCount); } catch { return; }
+        const count = parseInt(sel.value, 10);
+        for (let i = 0; i < ids.length; i++) {
+          const btn = container.querySelector(`[data-toggle-visibility="${cssEscape(ids[i])}"]`);
+          if (!btn) continue;
+          const instance = btn.closest('.detail-instance');
+          if (!instance) continue;
+          const shouldBeVisible = i < count;
+          const isCurrentlyVisible = !instance.classList.contains('hidden-instance');
+          if (shouldBeVisible === isCurrentlyVisible) continue;
+          applyDetailInstanceVisibility(instance, shouldBeVisible);
+          if (shouldBeVisible && !thumbnailCache[ids[i]]) {
+            postMsg({ type: 'get-thumbnails', nodeIds: [ids[i]] });
           }
         }
       });
@@ -1739,7 +1828,8 @@
           ${escHtml(compName)}
         </span>
         <div class="component-actions">
-          <span class="component-count">${instances.length}</span>
+          ${renderVisibleCountSelect(instances)}
+          ${instances.length < 2 ? `<span class="component-count">${instances.length}</span>` : ''}
           <button class="btn-icon" title="Select all" data-select-component="${escAttr(compName)}">
             <i class="hgi-stroke hgi-grid-view" style="font-size:14px"></i>
           </button>
@@ -1856,7 +1946,8 @@
 
     // Back to bulk view
     document.querySelectorAll('[data-back-to-bulk]').forEach(el => {
-      el.addEventListener('click', () => {
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('.visible-count-select')) return;
         detailViewComponent = null;
         if (currentData) {
           renderVariantsTab(currentData);
@@ -1872,6 +1963,17 @@
             if (ids.length > 0) postMsg({ type: 'get-thumbnails', nodeIds: ids });
           }
         }
+      });
+    });
+
+    // Visible-count dropdown — set how many of a group's instances are visible
+    document.querySelectorAll('[data-set-visible-count]').forEach(el => {
+      el.addEventListener('click', (e) => e.stopPropagation());
+      el.addEventListener('change', () => {
+        let ids;
+        try { ids = JSON.parse(el.dataset.setVisibleCount); } catch { return; }
+        const count = parseInt(el.value, 10);
+        postMsg({ type: 'set-visible-count', instanceIds: ids, count });
       });
     });
 
