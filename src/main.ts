@@ -989,6 +989,8 @@ pixso.ui.on("message", (msg: any) => {
 
   if (msg.type === "get-library-contents") {
     const { libraryKey } = msg;
+    const tLib0 = Date.now();
+    console.log(`[SV-OPEN] get-library-contents start key=${libraryKey}`);
     if (libraryKey === pixso.fileKey) {
       // getLibraryByKeyAsync rejects the current file key — walk local components instead
       // and return as library-contents so UI caches under the correct key
@@ -1015,10 +1017,13 @@ pixso.ui.on("message", (msg: any) => {
       }
       for (const page of pixso.root.children) walkLocal(page, (page as any).name);
       const folders = Object.entries(folderMap).map(([name, components]) => ({ name, components }));
+      console.log(`[SV-OPEN] get-library-contents (local-as-lib) done in ${Date.now() - tLib0}ms, folders=${folders.length}`);
       pixso.ui.postMessage({ type: "library-contents", libraryKey, folders });
       return;
     }
+    const tApi = Date.now();
     pixso.getLibraryByKeyAsync(libraryKey).then((assets) => {
+      console.log(`[SV-OPEN] getLibraryByKeyAsync resolved in ${Date.now() - tApi}ms, components=${assets.componentList.length}`);
       const folderMap: { [name: string]: any[] } = {};
 
       for (const comp of assets.componentList) {
@@ -1071,6 +1076,7 @@ pixso.ui.on("message", (msg: any) => {
         components,
       }));
 
+      console.log(`[SV-OPEN] get-library-contents done in ${Date.now() - tLib0}ms, folders=${folders.length}`);
       pixso.ui.postMessage({ type: "library-contents", libraryKey, folders });
     });
   }
@@ -1135,78 +1141,122 @@ pixso.ui.on("message", (msg: any) => {
   }
 
   if (msg.type === "search-swap-all") {
-    const { query } = msg;
+    const { query, source, seq } = msg as { query: string; source?: string; seq?: number };
     const q = query.toLowerCase();
+    const t0 = Date.now();
+    console.log("[SV-SEARCH-BE] start", { query, q, source, seq });
 
-    pixso.getLibraryListAsync().then(async (libraries) => {
-      const results: { id: string; name: string; thumbnailUrl?: string; source: string }[] = [];
+    const results: { id: string; name: string; thumbnailUrl?: string; source: string; variantsCount?: number }[] = [];
 
-      // Search local components
-      function searchLocal(node: BaseNode) {
+    // Helper: scan local Pixso tree for components matching q
+    function searchLocal(): { scanned: number; matched: number } {
+      let scanned = 0;
+      let matched = 0;
+      function walk(node: BaseNode) {
         if (results.length >= 30) return;
-        if ("type" in node) {
-          if (node.type === "COMPONENT") {
-            const parent = node.parent;
-            if (parent && parent.type === "COMPONENT_SET") {
-              if ((parent.name + " / " + node.name).toLowerCase().includes(q)) {
-                results.push({ id: node.id, name: parent.name + " / " + node.name, source: "Local" });
-              }
-            } else if (node.name.toLowerCase().includes(q)) {
-              results.push({ id: node.id, name: node.name, source: "Local" });
-            }
-          } else if (node.type === "COMPONENT_SET") {
-            // Search variants inside
-            if ("children" in node) {
-              for (const child of (node as any).children) {
-                if (results.length >= 30) break;
-                if (child.type === "COMPONENT" && (node.name + " / " + child.name).toLowerCase().includes(q)) {
-                  results.push({ id: child.id, name: node.name + " / " + child.name, source: "Local" });
-                }
-              }
-            }
+        if (!("type" in node)) return;
+        scanned++;
+        if (node.type === "COMPONENT") {
+          // Standalone component (not inside a set)
+          const parent = node.parent;
+          if (parent && parent.type === "COMPONENT_SET") {
+            // Skip — handled by COMPONENT_SET branch as a group
+          } else if (node.name.toLowerCase().includes(q)) {
+            results.push({ id: node.id, name: node.name, source: "Local" });
+            matched++;
           }
-          if ("children" in node && node.type !== "INSTANCE" && node.type !== "COMPONENT_SET") {
-            for (const child of (node as any).children) {
-              searchLocal(child);
+        } else if (node.type === "COMPONENT_SET") {
+          // Group the set as one row, drop into first variant on click
+          const children = "children" in node ? (node as { children: readonly SceneNode[] }).children : [];
+          const variants = children.filter((c) => c.type === "COMPONENT") as ComponentNode[];
+          if (variants.length > 0) {
+            const setName = node.name;
+            const setMatches = setName.toLowerCase().includes(q);
+            const variantMatches = variants.some((v) => v.name.toLowerCase().includes(q));
+            if (setMatches || variantMatches) {
+              results.push({
+                id: variants[0].id,
+                name: setName,
+                source: "Local",
+                variantsCount: variants.length,
+              });
+              matched++;
             }
           }
         }
-      }
-      searchLocal(pixso.currentPage);
-
-      // Search subscribed libraries
-      for (const lib of libraries) {
-        if (!lib.subscribed || results.length >= 30) continue;
-        try {
-          const assets = await pixso.getLibraryByKeyAsync(lib.key);
-          for (const comp of assets.componentList) {
-            if (results.length >= 30) break;
-            if (comp.type === "COMPONENT_SET") {
-              if (comp.name.toLowerCase().includes(q)) {
-                for (const v of comp.variants) {
-                  if (results.length >= 30) break;
-                  results.push({
-                    id: v.key,
-                    name: comp.name + " / " + v.name,
-                    thumbnailUrl: v.thumbnailUrl,
-                    source: lib.name,
-                  });
-                }
-              }
-            } else if (comp.name.toLowerCase().includes(q)) {
-              results.push({
-                id: comp.key,
-                name: comp.name,
-                thumbnailUrl: comp.thumbnailUrl,
-                source: lib.name,
-              });
-            }
+        if ("children" in node && node.type !== "INSTANCE" && node.type !== "COMPONENT_SET") {
+          for (const child of (node as { children: readonly SceneNode[] }).children) {
+            walk(child);
           }
-        } catch {}
+        }
+      }
+      walk(pixso.currentPage);
+      return { scanned, matched };
+    }
+
+    // Helper: scan a specific subscribed library by key
+    async function searchLibrary(libKey: string): Promise<{ name: string; total: number; matched: number; error?: string }> {
+      const libraries = await pixso.getLibraryListAsync();
+      const lib = libraries.find((l: { key: string }) => l.key === libKey);
+      if (!lib) return { name: libKey, total: 0, matched: 0, error: "library not found" };
+      const entry = { name: lib.name, total: 0, matched: 0, error: undefined as string | undefined };
+      if (!lib.subscribed) { entry.error = "library not subscribed"; return entry; }
+      try {
+        const assets = await pixso.getLibraryByKeyAsync(lib.key);
+        entry.total = assets.componentList.length;
+        for (const comp of assets.componentList) {
+          if (results.length >= 30) break;
+          if (comp.type === "COMPONENT_SET") {
+            const setNameMatches = comp.name.toLowerCase().includes(q);
+            const variantMatches = comp.variants.some((v) => (v.name || "").toLowerCase().includes(q));
+            if (setNameMatches || variantMatches) {
+              // Push the set as one row; clicking applies its first variant (matches list-view behavior)
+              const defaultV = comp.variants[0];
+              if (defaultV) {
+                results.push({
+                  id: defaultV.key,
+                  name: comp.name,
+                  thumbnailUrl: comp.thumbnailUrl || defaultV.thumbnailUrl,
+                  source: lib.name,
+                  variantsCount: comp.variants.length,
+                });
+                entry.matched++;
+              }
+            }
+          } else if (comp.name.toLowerCase().includes(q)) {
+            results.push({ id: comp.key, name: comp.name, thumbnailUrl: comp.thumbnailUrl, source: lib.name });
+            entry.matched++;
+          }
+        }
+      } catch (e: unknown) {
+        entry.error = (e instanceof Error ? e.message : String(e));
+      }
+      return entry;
+    }
+
+    (async () => {
+      const debug: {
+        source?: string;
+        local?: { scanned: number; matched: number };
+        library?: { name: string; total: number; matched: number; error?: string };
+        ms?: number;
+      } = { source };
+
+      if (!source || source === "__local__") {
+        debug.local = searchLocal();
+      } else if (source === "__quickswap__") {
+        // Quick swap is a UI-only view of preferred values; no backend search needed.
+        // Fall back to local so the user still gets something useful.
+        debug.local = searchLocal();
+      } else {
+        // Library key — scoped search
+        debug.library = await searchLibrary(source);
       }
 
-      pixso.ui.postMessage({ type: "swap-search-results", results });
-    });
+      debug.ms = Date.now() - t0;
+      console.log("[SV-SEARCH-BE] done", { query, totalResults: results.length, debug });
+      pixso.ui.postMessage({ type: "swap-search-results", results, seq, debug });
+    })();
   }
 
   if (msg.type === "get-preferred-swap-values") {
@@ -1457,6 +1507,9 @@ pixso.ui.on("message", (msg: any) => {
   if (msg.type === "open-swap-picker") {
     const { propertyName } = msg;
     const sel = pixso.currentPage.selection;
+    const t0 = Date.now();
+    const tLog = (label: string) => console.log(`[SV-OPEN] +${Date.now() - t0}ms ${label}`);
+    tLog("start");
 
     function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
       return Promise.race([
@@ -1491,6 +1544,7 @@ pixso.ui.on("message", (msg: any) => {
     }
 
     let currentComp = findCurrentSwapComp();
+    tLog(`findCurrentSwapComp done (found=${!!currentComp})`);
     // Fallback: resolve via componentProperties value node ID
     if (!currentComp && sel && sel.length > 0) {
       for (const node of sel) {
@@ -1536,24 +1590,33 @@ pixso.ui.on("message", (msg: any) => {
       }
     }
 
+    tLog(`prefKeys done (count=${prefKeys.length})`);
+
     // ── Build sources list ──
+    const tLibList = Date.now();
     const sourcesPromise = pixso.getLibraryListAsync().then((libraries) => {
+      tLog(`getLibraryListAsync resolved in ${Date.now() - tLibList}ms (total=${libraries.length}, subscribed=${libraries.filter((l) => l.subscribed).length})`);
+      const tCheckLocal = Date.now();
       const sources: { key: string; name: string; type: string }[] = [];
       let hasLocal = false;
+      let nodesChecked = 0;
       function checkLocal(node: BaseNode) {
         if (hasLocal) return;
         if ("type" in node) {
+          nodesChecked++;
           if (node.type === "COMPONENT" || node.type === "COMPONENT_SET") { hasLocal = true; return; }
           if ("children" in node && node.type !== "INSTANCE") {
-            for (const child of (node as any).children) { checkLocal(child); if (hasLocal) return; }
+            for (const child of (node as { children: readonly SceneNode[] }).children) { checkLocal(child); if (hasLocal) return; }
           }
         }
       }
       checkLocal(pixso.currentPage);
+      tLog(`checkLocal done in ${Date.now() - tCheckLocal}ms (nodesChecked=${nodesChecked}, hasLocal=${hasLocal})`);
       if (hasLocal) sources.push({ key: "__local__", name: "Local components", type: "local" });
       for (const lib of libraries) {
         if (lib.subscribed) sources.push({ key: lib.key, name: lib.name, type: "library" });
       }
+      tLog(`sources built (count=${sources.length})`);
       return sources;
     });
 
@@ -1572,15 +1635,18 @@ pixso.ui.on("message", (msg: any) => {
       if (!currentComp.remote) {
         // ── FAST PATH: local component — skip all async, respond immediately ──
         // Sources list will arrive later; navigateTo is enough to start rendering
+        tLog("posting fast-path swap-picker-data (local)");
         pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources: [{ key: "__local__", name: "Local components", type: "local" }], navigateTo: nav, prefKeys });
-        // Backfill full sources list in background
         sourcesPromise.then((sources) => {
+          tLog("posting sources-update (background)");
           pixso.ui.postMessage({ type: "swap-picker-sources-update", sources });
         });
       } else {
         // ── Remote component — need libraryKey from async call ──
+        const tLibInfo = Date.now();
         const libInfoPromise = withTimeout(currentComp.getLibraryInfoAsync(), 5000, null)
           .then((libInfo) => {
+            tLog(`getLibraryInfoAsync resolved in ${Date.now() - tLibInfo}ms (key=${libInfo && libInfo.key})`);
             if (libInfo && libInfo.key && libInfo.key !== pixso.fileKey) {
               nav.libraryKey = libInfo.key;
               nav.libraryName = libInfo.name;
@@ -1589,11 +1655,13 @@ pixso.ui.on("message", (msg: any) => {
           .catch(() => {});
 
         Promise.all([sourcesPromise, libInfoPromise]).then(([sources]) => {
+          tLog(`posting swap-picker-data (remote, sources=${sources.length})`);
           pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, navigateTo: nav, prefKeys });
         });
       }
     } else {
       sourcesPromise.then((sources) => {
+        tLog(`posting swap-picker-data (no currentComp, sources=${sources.length})`);
         pixso.ui.postMessage({ type: "swap-picker-data", propertyName, sources, navigateTo: null, prefKeys });
       });
     }

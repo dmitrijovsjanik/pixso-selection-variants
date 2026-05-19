@@ -2253,6 +2253,8 @@
       libraryCache: persistentLibraryCache,
       prefKeys: [],
       searchResults: null,
+      searchSeq: 0,
+      searchQuery: '',
       selectedSource: null,
       currentFolder: null,
       currentSubPath: null,
@@ -2510,22 +2512,38 @@
       }
     });
 
-    // Search
+    // Search — try local cache first (instant), fall back to backend only on cache miss.
+    // Always scoped to current source; uses seq number to drop stale backend responses.
     const searchInput = document.getElementById('swap-picker-search-input');
     let searchTimer = null;
     searchInput.addEventListener('input', () => {
       clearTimeout(searchTimer);
       const q = searchInput.value.trim();
       s.searchQuery = q;
+      console.log('[SV-SEARCH] input', { value: q, length: q.length, selectedSource: s.selectedSource, level: s.level });
       if (q.length < 2) {
         s.searchResults = null;
+        s.searchSeq = (s.searchSeq || 0) + 1;
         renderSwapPickerBody();
         return;
       }
+      // Try cache hit immediately — no debounce needed if it's local work
+      const cached = searchInCache(s.selectedSource, q);
+      if (cached !== null) {
+        console.log('[SV-SEARCH] cache hit', { count: cached.length, source: s.selectedSource });
+        s.searchSeq = (s.searchSeq || 0) + 1; // invalidate any in-flight backend request
+        s.searchResults = cached;
+        renderSwapPickerBody();
+        return;
+      }
+      // Cache miss → debounce + backend
       document.getElementById('swap-picker-body').innerHTML =
         `<div class="swap-picker-loading"><div class="spinner"></div>Searching...</div>`;
       searchTimer = setTimeout(() => {
-        postMsg({ type: 'search-swap-all', query: q });
+        s.searchSeq = (s.searchSeq || 0) + 1;
+        const seq = s.searchSeq;
+        console.log('[SV-SEARCH] cache miss, sending to backend', { query: q, source: s.selectedSource, seq });
+        postMsg({ type: 'search-swap-all', query: q, source: s.selectedSource, seq });
       }, 300);
     });
     searchInput.focus();
@@ -2778,6 +2796,61 @@
     return html;
   }
 
+  // Display name of a source key (library / local / quickswap)
+  function getSourceDisplayName(source) {
+    if (!source) return '';
+    if (source === '__local__') return 'Local';
+    if (source === '__quickswap__') return 'Quick swap';
+    const s = swapPickerState;
+    if (s && s.sources) {
+      const src = s.sources.find(x => x.key === source);
+      if (src) return src.name;
+    }
+    return source;
+  }
+
+  // Search inside persistentLibraryCache for the given source. Returns array or null if
+  // cache is missing (caller should fall back to backend search).
+  // Groups COMPONENT_SET variants into one row — clicking applies the first variant,
+  // same behavior as the normal component list.
+  function searchInCache(source, query) {
+    if (!source) return null;
+    const cache = persistentLibraryCache[source];
+    if (!cache || !cache.folders) return null;
+    const q = query.toLowerCase();
+    const sourceName = getSourceDisplayName(source);
+    const results = [];
+    for (const folder of cache.folders) {
+      if (results.length >= 30) break;
+      for (const comp of folder.components || []) {
+        if (results.length >= 30) break;
+        const isSet = comp.type === 'COMPONENT_SET' && comp.variants && comp.variants.length > 0;
+        const nameMatch = (comp.name || '').toLowerCase().includes(q);
+        if (isSet) {
+          const variantMatch = comp.variants.some(v => (v.name || '').toLowerCase().includes(q));
+          if (nameMatch || variantMatch) {
+            const defaultV = comp.variants[0];
+            results.push({
+              id: defaultV.id || defaultV.key || comp.id || comp.key,
+              name: comp.name,
+              thumbnailUrl: comp.thumbnailUrl || defaultV.thumbnailUrl,
+              source: sourceName,
+              variantsCount: comp.variants.length,
+            });
+          }
+        } else if (nameMatch) {
+          results.push({
+            id: comp.id || comp.key,
+            name: comp.name,
+            thumbnailUrl: comp.thumbnailUrl,
+            source: sourceName,
+          });
+        }
+      }
+    }
+    return results;
+  }
+
   function renderPickerSearchResults(results) {
     if (!results || results.length === 0) {
       return `<div class="swap-picker-empty">No components found</div>`;
@@ -2786,13 +2859,16 @@
     let html = '';
     for (const r of results) {
       const thumb = r.thumbnailUrl
-        ? `<img class="swap-thumb" src="${r.thumbnailUrl}" />`
+        ? `<img class="swap-thumb" src="${escAttr(r.thumbnailUrl)}" />`
         : `<div class="swap-thumb-placeholder">${compSvg}</div>`;
+      const subtitle = r.variantsCount
+        ? `${r.variantsCount} variant${r.variantsCount > 1 ? 's' : ''}${r.source ? ' · ' + escHtml(r.source) : ''}`
+        : (r.source ? escHtml(r.source) : '');
       html += `<div class="swap-component-item" data-picker-apply="${escAttr(r.id)}">
         ${thumb}
         <div class="swap-comp-info">
           <div class="swap-comp-name">${escHtml(r.name)}</div>
-          ${r.source ? `<div class="swap-comp-source">${escHtml(r.source)}</div>` : ''}
+          ${subtitle ? `<div class="swap-comp-source">${subtitle}</div>` : ''}
         </div>
       </div>`;
     }
@@ -3083,6 +3159,17 @@
     }
 
     if (msg.type === 'swap-search-results') {
+      const stale = swapPickerState && typeof msg.seq === 'number' && msg.seq !== swapPickerState.searchSeq;
+      console.log('[SV-SEARCH] results received', {
+        count: (msg.results || []).length,
+        seq: msg.seq,
+        currentSeq: swapPickerState && swapPickerState.searchSeq,
+        stale,
+        query: swapPickerState && swapPickerState.searchQuery,
+        selectedSource: swapPickerState && swapPickerState.selectedSource,
+        debug: msg.debug,
+      });
+      if (stale) return; // drop superseded response
       if (swapPickerState) {
         swapPickerState.searchResults = msg.results;
         renderSwapPickerBody();
