@@ -138,6 +138,35 @@
     color: var(--neutral-9);
   }
 
+  #debug-footer {
+    position: sticky;
+    bottom: 0;
+    padding: 6px 12px;
+    background: var(--neutral-0);
+    text-align: right;
+    border-top: 1px solid var(--neutral-a-2);
+    z-index: 5;
+  }
+
+  #copy-debug-btn {
+    font-size: 10px;
+    font-family: inherit;
+    color: var(--neutral-5);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 2px 4px;
+    transition: color var(--transition-fast);
+  }
+
+  #copy-debug-btn:hover {
+    color: var(--neutral-9);
+  }
+
+  #copy-debug-btn.copied {
+    color: var(--brand-9);
+  }
+
   /* ─── Component Group ─── */
   .component-group {
     border-bottom: 1px solid var(--neutral-3);
@@ -1238,6 +1267,10 @@
 <div id="variants-tab" class="tab-content active"></div>
 <div id="instances-tab" class="tab-content"></div>
 
+<div id="debug-footer">
+  <button type="button" id="copy-debug-btn" title="Copy plugin state to clipboard for debugging">copy debug</button>
+</div>
+
 <script>
   // ─── State ───
   let currentData = null;
@@ -1265,6 +1298,20 @@
       document.getElementById(tab.dataset.tab + '-tab').classList.add('active');
     });
   });
+
+  // ─── Debug button ───
+  const debugBtn = document.getElementById('copy-debug-btn');
+  if (debugBtn) {
+    debugBtn.addEventListener('click', () => {
+      copyDebugDump();
+      debugBtn.classList.add('copied');
+      debugBtn.textContent = 'copied!';
+      setTimeout(() => {
+        debugBtn.classList.remove('copied');
+        debugBtn.textContent = 'copy debug';
+      }, 1500);
+    });
+  }
 
   // ─── Go up button (permanent, not re-rendered) ───
   document.getElementById('go-up-bar').addEventListener('click', () => {
@@ -1294,6 +1341,68 @@
     return String(s).replace(/[^a-zA-Z0-9_-]/g, c => '\\' + c);
   }
 
+  // ─── Debug helpers ───
+  // Dumps the current grouping with enough info to diagnose count bugs.
+  // Available as window.dumpSV() in DevTools console, and via the "copy debug" link.
+  function buildDebugDump() {
+    if (!currentData) return { error: 'no selection data' };
+    const out = {
+      time: new Date().toISOString(),
+      totalSelected: currentData.totalSelected,
+      hasSelection: currentData.hasSelection,
+      instancesLength: (currentData.instances || []).length,
+      groups: {},
+    };
+    const groups = currentData.groupedByComponent || {};
+    for (const [name, insts] of Object.entries(groups)) {
+      const ownerCounts = {};
+      for (const it of insts) {
+        const k = it.selectionOwnerId || '';
+        ownerCounts[k] = (ownerCounts[k] || 0) + 1;
+      }
+      out.groups[name] = {
+        count: insts.length,
+        ownerCounts,
+        items: insts.map(i => ({
+          id: i.id,
+          name: i.name,
+          path: i.path,
+          depth: i.depth,
+          visible: i.visible,
+          directlyVisible: i.directlyVisible,
+          selectionOwnerId: i.selectionOwnerId,
+        })),
+      };
+    }
+    return out;
+  }
+  window.dumpSV = () => { const d = buildDebugDump(); console.log('[SV-DEBUG]', d); return d; };
+
+  function copyDebugDump() {
+    const dump = buildDebugDump();
+    const text = JSON.stringify(dump, null, 2);
+    // Always print to console as raw string so it's easy to select & copy
+    console.log('[SV-DEBUG] >>>>>>>>>> START >>>>>>>>>>\n' + text + '\n[SV-DEBUG] <<<<<<<<<< END <<<<<<<<<<');
+    // Try modern clipboard API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
+    // execCommand fallback for older webviews
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.top = '0';
+      ta.style.left = '0';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch (e) { /* noop */ }
+  }
+
   // Apply hidden/visible state to a .detail-instance element (collapse + icon swap)
   function applyDetailInstanceVisibility(instance, visible) {
     const btn = instance.querySelector('[data-toggle-visibility]');
@@ -1307,35 +1416,59 @@
     else collapseInstance(instance);
   }
 
-  // Recompute dropdown selected value based on current DOM state of detail-instances.
-  // Counts visible items regardless of position — matches "how many are showing".
+  // Recompute dropdown value from current DOM state. Uses the max per-batch visible count
+  // to mirror "highest currently shown per container", matching how the dropdown is rendered.
   function syncVisibleCountSelect(container) {
     container.querySelectorAll('[data-set-visible-count]').forEach(sel => {
-      let ids;
-      try { ids = JSON.parse(sel.dataset.setVisibleCount); } catch { return; }
-      let visibleCount = 0;
-      for (const id of ids) {
-        const btn = container.querySelector(`[data-toggle-visibility="${cssEscape(id)}"]`);
-        if (!btn) continue;
-        const inst = btn.closest('.detail-instance');
-        if (inst && !inst.classList.contains('hidden-instance')) visibleCount++;
+      let batches;
+      try { batches = JSON.parse(sel.dataset.setVisibleCount); } catch { return; }
+      let maxVisible = 0;
+      for (const batch of batches) {
+        let v = 0;
+        for (const id of batch) {
+          const btn = container.querySelector(`[data-toggle-visibility="${cssEscape(id)}"]`);
+          if (!btn) continue;
+          const inst = btn.closest('.detail-instance');
+          if (inst && !inst.classList.contains('hidden-instance')) v++;
+        }
+        if (v > maxVisible) maxVisible = v;
       }
-      sel.value = String(visibleCount);
+      if (maxVisible < 1) maxVisible = 1;
+      sel.value = String(maxVisible);
     });
   }
 
   // ─── Visible-count dropdown for a group of instances ───
   // Sets node.visible = (index < selected count) for the given instance IDs.
+  // Splits instances into per-container batches so duplicate components in different
+  // containers don't merge their counts. Each batch is the IDs of instances that share
+  // the same selectionOwnerId (top-level selected node they descend from).
+  function buildVisibleCountBatches(instances) {
+    const map = new Map();
+    for (const inst of instances) {
+      const key = inst.selectionOwnerId || '';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(inst);
+    }
+    return Array.from(map.values());
+  }
+
   function renderVisibleCountSelect(instances) {
     if (!instances || instances.length < 2) return '';
-    const total = instances.length;
-    const visibleCount = instances.filter(i => i.directlyVisible).length;
-    const ids = instances.map(i => i.id);
+    const batches = buildVisibleCountBatches(instances);
+    const maxPerBatch = batches.reduce((m, b) => Math.max(m, b.length), 0);
+    // If max per-container size is 1, dropdown is pointless
+    if (maxPerBatch < 2) return '';
+    // Current value = max visible across batches — reflects "highest currently shown per container"
+    const rawVisible = batches.reduce((m, b) => Math.max(m, b.filter(i => i.directlyVisible).length), 0);
+    const visibleCount = Math.max(1, Math.min(maxPerBatch, rawVisible));
+    // Payload is an array of ID arrays, one per batch
+    const payload = batches.map(b => b.map(i => i.id));
     let opts = '';
-    for (let i = 0; i <= total; i++) {
+    for (let i = 1; i <= maxPerBatch; i++) {
       opts += `<option value="${i}" ${i === visibleCount ? 'selected' : ''}>${i}</option>`;
     }
-    return `<select class="visible-count-select" data-set-visible-count='${escAttr(JSON.stringify(ids))}' title="Show first N, hide the rest">${opts}</select>`;
+    return `<select class="visible-count-select" data-set-visible-count='${escAttr(JSON.stringify(payload))}' title="Show first N per container, hide the rest">${opts}</select>`;
   }
 
   // ─── Clean property name (remove unique suffix like #123:456) ───
@@ -1747,23 +1880,26 @@
       });
     });
 
-    // Dropdown change in detail view — apply visibility locally to each instance
+    // Dropdown change in detail view — apply per-batch visibility locally to each instance
     container.querySelectorAll('[data-set-visible-count]').forEach(sel => {
       sel.addEventListener('change', () => {
-        let ids;
-        try { ids = JSON.parse(sel.dataset.setVisibleCount); } catch { return; }
+        let batches;
+        try { batches = JSON.parse(sel.dataset.setVisibleCount); } catch { return; }
         const count = parseInt(sel.value, 10);
-        for (let i = 0; i < ids.length; i++) {
-          const btn = container.querySelector(`[data-toggle-visibility="${cssEscape(ids[i])}"]`);
-          if (!btn) continue;
-          const instance = btn.closest('.detail-instance');
-          if (!instance) continue;
-          const shouldBeVisible = i < count;
-          const isCurrentlyVisible = !instance.classList.contains('hidden-instance');
-          if (shouldBeVisible === isCurrentlyVisible) continue;
-          applyDetailInstanceVisibility(instance, shouldBeVisible);
-          if (shouldBeVisible && !thumbnailCache[ids[i]]) {
-            postMsg({ type: 'get-thumbnails', nodeIds: [ids[i]] });
+        for (const batch of batches) {
+          for (let i = 0; i < batch.length; i++) {
+            const id = batch[i];
+            const btn = container.querySelector(`[data-toggle-visibility="${cssEscape(id)}"]`);
+            if (!btn) continue;
+            const instance = btn.closest('.detail-instance');
+            if (!instance) continue;
+            const shouldBeVisible = i < count;
+            const isCurrentlyVisible = !instance.classList.contains('hidden-instance');
+            if (shouldBeVisible === isCurrentlyVisible) continue;
+            applyDetailInstanceVisibility(instance, shouldBeVisible);
+            if (shouldBeVisible && !thumbnailCache[id]) {
+              postMsg({ type: 'get-thumbnails', nodeIds: [id] });
+            }
           }
         }
       });
@@ -1966,14 +2102,14 @@
       });
     });
 
-    // Visible-count dropdown — set how many of a group's instances are visible
+    // Visible-count dropdown — set how many of each container's instances are visible
     document.querySelectorAll('[data-set-visible-count]').forEach(el => {
       el.addEventListener('click', (e) => e.stopPropagation());
       el.addEventListener('change', () => {
-        let ids;
-        try { ids = JSON.parse(el.dataset.setVisibleCount); } catch { return; }
+        let batches;
+        try { batches = JSON.parse(el.dataset.setVisibleCount); } catch { return; }
         const count = parseInt(el.value, 10);
-        postMsg({ type: 'set-visible-count', instanceIds: ids, count });
+        postMsg({ type: 'set-visible-count', batches, count });
       });
     });
 
@@ -2731,6 +2867,17 @@
       currentData = msg.data;
       parentInfo = msg.parentInfo || null;
       swapOptionsMap = {};
+
+      // Debug: log group counts so we can diagnose multi-container grouping issues
+      try {
+        const groups = currentData && currentData.groupedByComponent || {};
+        const summary = Object.entries(groups).map(([name, insts]) => ({
+          name,
+          count: insts.length,
+          paths: Array.from(new Set(insts.map(i => i.path))),
+        }));
+        console.log('[SV-DEBUG] selection-data', { totalSelected: currentData && currentData.totalSelected, summary });
+      } catch (e) { /* noop */ }
 
       // If in detail view, skip full re-render — data is updated, DOM is already correct
       if (detailViewComponent) {

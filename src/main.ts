@@ -39,6 +39,7 @@ interface InstanceInfo {
   variantProperties: VariantProperty[];
   componentProperties: ComponentPropertyInfo[];
   path: string; // parent chain for display
+  selectionOwnerId: string; // id of the top-level selected node this instance descends from
 }
 
 interface SelectionData {
@@ -300,15 +301,15 @@ function analyzeSelectionSync(): SelectionData {
   }
 
   const results: InstanceInfo[] = [];
-  const stack: { node: SceneNode; depth: number }[] = [];
+  const stack: { node: SceneNode; depth: number; ownerId: string }[] = [];
 
-  // Seed stack
+  // Seed stack — each seed carries its own selection-root id
   for (let i = selection.length - 1; i >= 0; i--) {
-    stack.push({ node: selection[i], depth: 0 });
+    stack.push({ node: selection[i], depth: 0, ownerId: selection[i].id });
   }
 
   while (stack.length > 0) {
-    const { node, depth } = stack.pop()!;
+    const { node, depth, ownerId } = stack.pop()!;
 
     if (isInstanceNode(node)) {
       const mainComponent = node.mainComponent;
@@ -323,15 +324,16 @@ function analyzeSelectionSync(): SelectionData {
         variantProperties: getVariantProperties(node),
         componentProperties: getComponentProperties(node),
         path: getNodePath(node),
+        selectionOwnerId: ownerId,
       });
       if (hasChildren(node)) {
         for (let i = node.children.length - 1; i >= 0; i--) {
-          stack.push({ node: node.children[i], depth: depth + 1 });
+          stack.push({ node: node.children[i], depth: depth + 1, ownerId });
         }
       }
     } else if (hasChildren(node)) {
       for (let i = node.children.length - 1; i >= 0; i--) {
-        stack.push({ node: node.children[i], depth: depth + 1 });
+        stack.push({ node: node.children[i], depth: depth + 1, ownerId });
       }
     }
   }
@@ -356,10 +358,10 @@ function analyzeSelectionAsync(onDone: (data: SelectionData) => void) {
 
   const myFlag = ++analyzeAbortFlag;
   const results: InstanceInfo[] = [];
-  const stack: { node: SceneNode; depth: number }[] = [];
+  const stack: { node: SceneNode; depth: number; ownerId: string }[] = [];
 
   for (let i = selection.length - 1; i >= 0; i--) {
-    stack.push({ node: selection[i], depth: 0 });
+    stack.push({ node: selection[i], depth: 0, ownerId: selection[i].id });
   }
 
   let scanned = 0;
@@ -370,7 +372,7 @@ function analyzeSelectionAsync(onDone: (data: SelectionData) => void) {
 
     let processed = 0;
     while (stack.length > 0 && processed < CHUNK_SIZE) {
-      const { node, depth } = stack.pop()!;
+      const { node, depth, ownerId } = stack.pop()!;
       scanned++;
       processed++;
 
@@ -387,15 +389,16 @@ function analyzeSelectionAsync(onDone: (data: SelectionData) => void) {
           variantProperties: getVariantProperties(node),
           componentProperties: getComponentProperties(node),
           path: getNodePath(node),
+          selectionOwnerId: ownerId,
         });
         if (hasChildren(node)) {
           for (let i = node.children.length - 1; i >= 0; i--) {
-            stack.push({ node: node.children[i], depth: depth + 1 });
+            stack.push({ node: node.children[i], depth: depth + 1, ownerId });
           }
         }
       } else if (hasChildren(node)) {
         for (let i = node.children.length - 1; i >= 0; i--) {
-          stack.push({ node: node.children[i], depth: depth + 1 });
+          stack.push({ node: node.children[i], depth: depth + 1, ownerId });
         }
       }
     }
@@ -725,10 +728,23 @@ pixso.ui.on("message", (msg: any) => {
   }
 
   if (msg.type === "set-visible-count") {
-    const { instanceIds, count } = msg as { instanceIds: string[]; count: number };
-    for (let i = 0; i < instanceIds.length; i++) {
-      const node = pixso.getNodeById(instanceIds[i]) as SceneNode | null;
-      if (node) node.visible = i < count;
+    const { count } = msg as { count: number };
+    const batches = (msg as { batches?: string[][] }).batches;
+    if (batches && batches.length) {
+      // Per-container batched: first N of each batch visible, rest hidden.
+      for (const batch of batches) {
+        for (let i = 0; i < batch.length; i++) {
+          const node = pixso.getNodeById(batch[i]) as SceneNode | null;
+          if (node) node.visible = i < count;
+        }
+      }
+    } else {
+      // Legacy flat list
+      const ids = (msg as { instanceIds?: string[] }).instanceIds || [];
+      for (let i = 0; i < ids.length; i++) {
+        const node = pixso.getNodeById(ids[i]) as SceneNode | null;
+        if (node) node.visible = i < count;
+      }
     }
     sendSelectionData();
   }
